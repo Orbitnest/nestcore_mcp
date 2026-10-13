@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolContext } from './index.js';
-import { formatErrorResponse } from '../utils/errors.js';
+import { formatErrorResponse, ValidationError } from '../utils/errors.js';
 
 export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
 
@@ -69,17 +69,22 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Update Admin ───
-  // HIGH-02: changing another admin's email / active state is identity-mutating
-  // (can lock out a legitimate admin), so require an explicit confirmation flag.
+  // HIGH-02: changing email / active state is identity-mutating (can lock out a
+  // legitimate admin), so require an explicit confirmation flag.
   server.registerTool('orbitnest_update_admin', {
-    description: 'Update an admin user\'s details. Requires confirmUpdate=true.',
+    description:
+      'Update an admin. fullName/email can only be changed on YOUR OWN account; an email change needs currentPassword ' +
+      'and signs out all of your sessions (including this one). isActive activates/deactivates another workspace member ' +
+      'and needs the admin role. Requires confirmUpdate=true.',
     inputSchema: {
       adminId: z.string(),
+      fullName: z.string().min(1).max(100).optional(),
       email: z.string().email().optional(),
+      currentPassword: z.string().max(128).optional().describe('Required when changing email'),
       isActive: z.boolean().optional(),
       confirmUpdate: z.boolean(),
     },
-  }, async ({ adminId, email, isActive, confirmUpdate }) => {
+  }, async ({ adminId, fullName, email, currentPassword, isActive, confirmUpdate }) => {
     try {
       await ctx.session.ensureAuthenticated();
       if (!confirmUpdate) {
@@ -90,7 +95,18 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
           }, null, 2) }],
         };
       }
-      const result = await ctx.apiClient.updateAdmin(adminId, { email, isActive });
+      if (fullName === undefined && email === undefined && isActive === undefined) {
+        return formatErrorResponse(new ValidationError('Nothing to update: pass fullName, email or isActive.'));
+      }
+      const result: Record<string, unknown> = {};
+      if (fullName !== undefined || email !== undefined) {
+        result.profile = await ctx.apiClient.updateAdmin(adminId, {
+          full_name: fullName, email, current_password: currentPassword,
+        });
+      }
+      if (isActive !== undefined) {
+        result.active = await ctx.apiClient.setAdminActive(adminId, isActive);
+      }
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };

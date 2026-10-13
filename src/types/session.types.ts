@@ -7,7 +7,6 @@ export interface McpSession {
 
   currentProjectId: string | null;
   currentProjectSlug: string | null;
-  environment: 'development' | 'staging' | 'production';
 
   schemaSnapshot: DatabaseSchema | null;
   projectMetadata: ProjectMetadata | null;
@@ -81,14 +80,20 @@ export interface ProjectMetadata {
   settings?: Record<string, unknown>;
 }
 
+/**
+ * `.orbitnest/config.json`, shared with the OrbitNest CLI. Canonical shape;
+ * CLI <= 0.5 wrote `slug` instead of `projectSlug`, so readers accept both.
+ */
 export interface WorkspaceConfig {
   projectId: string;
-  projectSlug: string;
-  environment: 'development' | 'staging' | 'production';
-  apiUrl: string;
+  projectSlug?: string;
+  name?: string;
+  apiUrl?: string;
 }
 
+/** `~/.orbitnest/credentials.json`, shared with the CLI (which also stores `apiUrl`). */
 export interface StoredCredentials {
+  apiUrl?: string;
   access_token: string;
   refresh_token: string;
   expires_at: string;

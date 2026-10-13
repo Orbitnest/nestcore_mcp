@@ -42,6 +42,7 @@ export const ADMIN = {
   UPDATE: (id: string) => `/admin/admins/${e(id)}`,
   DELETE: (id: string) => `/admin/admins/${e(id)}`,
   UPDATE_PASSWORD: (id: string) => `/admin/admins/${e(id)}/password`,
+  SET_ACTIVE: (id: string) => `/admin/admins/${e(id)}/active`,
   API_KEYS_CREATE: '/admin/api-keys',
   API_KEYS_LIST: '/admin/api-keys',
   API_KEYS_DELETE: (id: string) => `/admin/api-keys/${e(id)}`,

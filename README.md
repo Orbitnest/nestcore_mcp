@@ -84,12 +84,9 @@ cp .env.example .env
 | `ORBITNEST_API_URL` | `https://api.orbitnest.io` | OrbitNest backend URL |
 | `ORBITNEST_API_BASE_PATH` | `/api` | API base path |
 | `MCP_SERVER_NAME` | `orbitnest-studio` | MCP server identifier |
-| `MCP_SERVER_VERSION` | `1.0.0` | Server version |
 | `LOG_LEVEL` | `info` | Logging level: `debug`, `info`, `warn`, `error` |
 | `DEFAULT_PROJECT_ID` | _(empty)_ | Auto-select project on startup |
-| `DEFAULT_ENVIRONMENT` | `development` | Default environment context |
 | `ENABLE_SQL_GUARD` | `true` | Validate SQL before execution |
-| `REQUIRE_DESTRUCTIVE_CONFIRMATION` | `true` | Require `confirmDestructive=true` for DROP/DELETE |
 | `BLOCK_AUTH_TABLE_MUTATIONS` | `true` | Block writes to `auth_*` tables |
 | `SCHEMA_CACHE_TTL` | `300000` | Schema cache lifetime in ms (5 min) |
 | `TOKEN_REFRESH_THRESHOLD` | `60000` | Refresh token when < 60s from expiry |
@@ -171,7 +168,6 @@ The repository includes `.vscode/mcp.json` which is automatically picked up by t
         "ORBITNEST_API_URL": "https://api.orbitnest.io",
         "LOG_LEVEL": "info",
         "ENABLE_SQL_GUARD": "true",
-        "REQUIRE_DESTRUCTIVE_CONFIRMATION": "true",
         "BLOCK_AUTH_TABLE_MUTATIONS": "true"
       }
     }
@@ -431,10 +427,12 @@ If your project root contains `.orbitnest/config.json`, the MCP server automatic
 {
   "projectId": "proj_abc123",
   "projectSlug": "my-project",
-  "environment": "development",
+  "name": "My Project",
   "apiUrl": "https://api.orbitnest.io"
 }
 ```
+
+This is the same file `orbitnest link` (the CLI) writes; older CLI versions wrote `slug` instead of `projectSlug`, which is still read. `orbitnest_set_active_project` updates this file when one was found, and never creates one elsewhere.
 
 ---
 

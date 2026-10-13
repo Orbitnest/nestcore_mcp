@@ -4,7 +4,9 @@ import { createHash } from 'crypto';
 import { MigrationError, type MigrationFile } from './types.js';
 
 const MIGRATION_FILE_RE = /^(\d+)[_-](.+)\.sql$/i;
-const DOWN_MARKER_RE = /^\s*--+\s*(migrate:)?down\b.*$/i;
+// The whole line must be the marker (`-- migrate:down`, `-- down`, `--- DOWN ---`),
+// so a comment like `-- Down-sampled …` stays in the up section (same as node_sdk).
+const DOWN_MARKER_RE = /^\s*--+\s*(migrate:)?down\s*-*\s*$/i;
 
 /** Split a migration into up (forward) and down (rollback) SQL. */
 function splitUpDown(content: string): { up: string; down: string } {

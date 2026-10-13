@@ -5,9 +5,7 @@ export interface AppConfig {
   serverVersion: string;
   logLevel: string;
   defaultProjectId: string | null;
-  defaultEnvironment: 'development' | 'staging' | 'production';
   enableSqlGuard: boolean;
-  requireDestructiveConfirmation: boolean;
   blockAuthTableMutations: boolean;
   schemaCacheTtl: number;
   tokenRefreshThreshold: number;

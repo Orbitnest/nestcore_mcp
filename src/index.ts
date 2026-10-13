@@ -8,25 +8,32 @@ import type { OrbitNestClient } from './sdk/orbitnest.client.js';
 let _tracker: SessionTracker | null = null;
 let _client: OrbitNestClient | null = null;
 
-// ── Graceful shutdown: auto-write session digest on SIGTERM / SIGINT ─────────
-// Fires when the MCP host (Claude Desktop, CLI, etc.) terminates the process.
-// If the AI wrote decisions/tasks/events but never called orbitnest_sync_memory,
-// this writes an auto-generated digest so nothing is silently lost.
-async function autoSyncOnExit(signal: string) {
+// ── Graceful shutdown: auto-write session digest when the session ends ──────
+// MCP hosts usually end a stdio server by closing its stdin (SIGTERM is never
+// delivered on Windows). If the AI wrote decisions/tasks/events but never
+// called orbitnest_sync_memory, write an auto-generated digest so nothing is
+// silently lost.
+let _exiting = false;
+async function autoSyncOnExit(reason: string) {
+  if (_exiting) return;
+  _exiting = true;
   if (!_tracker || !_client) return;
   const pid = _tracker.getProjectId();
   if (!pid || _tracker.pendingCount() === 0) return;
   try {
-    logger.info(`[${signal}] Auto-syncing ${_tracker.pendingCount()} unsynced session writes…`);
+    logger.info(`[${reason}] Auto-syncing ${_tracker.pendingCount()} unsynced session writes…`);
     await _client.setProjectProfile(pid, { digest: _tracker.autoDigest() });
-    logger.info(`[${signal}] Session digest written to project memory.`);
+    logger.info(`[${reason}] Session digest written to project memory.`);
   } catch (err) {
-    logger.warn(`[${signal}] Auto-sync failed — changes may be lost`, { err: String(err) });
+    logger.warn(`[${reason}] Auto-sync failed — changes may be lost`, { err: String(err) });
   }
 }
 
-process.on('SIGTERM', async () => { await autoSyncOnExit('SIGTERM'); process.exit(0); });
-process.on('SIGINT',  async () => { await autoSyncOnExit('SIGINT');  process.exit(0); });
+const shutdown = (reason: string) => { void autoSyncOnExit(reason).finally(() => process.exit(0)); };
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.stdin.on('end', () => shutdown('stdin closed'));
+process.stdin.on('close', () => shutdown('stdin closed'));
 
 async function main(): Promise<void> {
   try {

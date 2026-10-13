@@ -115,16 +115,25 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       await ctx.session.ensureAuthenticated();
       const project = await ctx.projectService.loadProject(projectId);
       ctx.session.setActiveProject(project);
+      ctx.tracker.setProject(project.id);
 
-      // Cache schema
-      const schema = await ctx.schemaService.getSchema(projectId, true);
-      ctx.session.setSchemaSnapshot(schema);
+      // Cache schema — best effort: the project is already active, so a schema
+      // failure must not report the whole call as failed.
+      let tablesLoaded: number | undefined;
+      let schemaWarning: string | undefined;
+      try {
+        const schema = await ctx.schemaService.getSchema(project.id, true);
+        ctx.session.setSchemaSnapshot(schema);
+        tablesLoaded = schema.tables.length;
+      } catch (err) {
+        schemaWarning = `Schema not cached: ${err instanceof Error ? err.message : String(err)}`;
+      }
 
-      // Save workspace config
-      ctx.workspaceService.saveWorkspaceConfig({
+      // Persist into the CLI-linked workspace file, if there is one.
+      const savedTo = ctx.workspaceService.saveWorkspaceConfig({
         projectId: project.id,
         projectSlug: project.slug,
-        environment: ctx.session.getSession().environment,
+        name: project.name,
         apiUrl: ctx.session.getSession().apiUrl,
       });
 
@@ -133,7 +142,9 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
           success: true,
           message: `Active project set to "${project.name}"`,
           project: { id: project.id, name: project.name, slug: project.slug },
-          tablesLoaded: schema.tables.length,
+          tablesLoaded,
+          ...(schemaWarning ? { warning: schemaWarning } : {}),
+          workspaceConfig: savedTo ?? 'not saved (no .orbitnest/config.json found; run `orbitnest link` in the project directory to persist it)',
         }, null, 2) }],
       };
     } catch (error) {

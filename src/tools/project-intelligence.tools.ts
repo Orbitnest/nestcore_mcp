@@ -27,6 +27,20 @@ const projectSummarySchema = z.object({
   highlights:  z.array(z.string().max(400)).max(30).optional().describe('Key features / capabilities as bullet points'),
 });
 
+// Must match the API (project-intelligence.types.ts EVENT_TYPES / DTO minimums).
+const EVENT_TYPES = ['deploy', 'bug', 'decision', 'update', 'milestone', 'incident', 'commit', 'release', 'note', 'other'] as const;
+
+/** One retry on 429 — the intelligence routes share a 60 req/min per-IP throttle. */
+async function withThrottleRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if ((e as { statusCode?: number }).statusCode !== 429) throw e;
+    await new Promise((r) => setTimeout(r, 3000));
+    return fn();
+  }
+}
+
 function encodeDigest(d: z.infer<typeof sessionDigestSchema>): string {
   return JSON.stringify({ v: 1, kind: 'session_digest', ...d });
 }
@@ -98,7 +112,8 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'detail), list `next` steps as separate strings, and `blockers` as separate strings. Do NOT cram',
       'everything into one paragraph — the UI renders each section separately for readability.',
       '',
-      'All items are written in parallel. No need to call add_task / add_decision / add_event separately.',
+      'Items are written one by one; any item the API rejects is listed with its error so you can fix and retry it.',
+      'No need to call add_task / add_decision / add_event separately.',
       '',
       'WHEN TO CALL: At the end of EVERY session, before the conversation closes.',
       'Also call it proactively if the user asks to "save", "sync", "persist", or "commit" memory.',
@@ -111,17 +126,17 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
         'STRUCTURED session digest: { title, summary?, done: [{title, detail?}], next: [...], blockers: [...] }. Break work into discrete items — do not write a single paragraph.',
       ),
       decisions: z.array(z.object({
-        decision: z.string().min(1).max(500).describe('The decision, in one sentence'),
+        decision: z.string().min(3).max(500).describe('The decision, in one sentence'),
         reason:   z.string().max(2000).optional().describe('Why this decision was made'),
       })).optional().describe('Decisions made this session not yet written via orbitnest_add_decision'),
       tasks: z.array(z.object({
-        title:    z.string().min(1).max(200),
+        title:    z.string().min(3).max(200),
         detail:   z.string().max(2000).optional(),
         priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
       })).optional().describe('Follow-up tasks identified this session not yet written via orbitnest_add_task'),
       events: z.array(z.object({
-        type:    z.enum(['deploy', 'bug', 'decision', 'update', 'milestone', 'incident', 'other']),
-        summary: z.string().min(1).max(500),
+        type:    z.enum(EVENT_TYPES),
+        summary: z.string().min(3).max(500),
       })).optional().describe('Notable events not yet written via orbitnest_add_event'),
     },
   }, async ({ projectId, digest, decisions, tasks, events }) => {
@@ -130,41 +145,42 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       tracker.setProject(pid);
 
-      const writes: Promise<unknown>[] = [];
-
-      // Write profile/digest (serialized structured JSON)
-      writes.push(ctx.apiClient.setProjectProfile(pid, { digest: encodeDigest(digest) }));
-
-      // Write decisions in parallel
-      for (const d of decisions ?? []) {
-        writes.push(ctx.apiClient.addDecision(pid, d));
-        tracker.record({ kind: 'decision', summary: d.decision });
+      // Sequential (not parallel) so a big sync doesn't trip the per-IP throttle.
+      type Item = { kind: 'digest' | 'decision' | 'task' | 'event'; label: string; run: () => Promise<unknown> };
+      const items: Item[] = [
+        { kind: 'digest', label: digest.title, run: () => ctx.apiClient.setProjectProfile(pid, { digest: encodeDigest(digest) }) },
+        ...(decisions ?? []).map((d) => ({ kind: 'decision' as const, label: d.decision, run: () => ctx.apiClient.addDecision(pid, d) })),
+        ...(tasks ?? []).map((t) => ({ kind: 'task' as const, label: t.title, run: () => ctx.apiClient.addTask(pid, t) })),
+        ...(events ?? []).map((e) => ({ kind: 'event' as const, label: `[${e.type}] ${e.summary}`, run: () => ctx.apiClient.addEvent(pid, e) })),
+      ];
+      const failures: Array<{ item: Item; error: string }> = [];
+      for (const item of items) {
+        try {
+          await withThrottleRetry(item.run);
+        } catch (e) {
+          failures.push({ item, error: e instanceof Error ? e.message : String(e) });
+        }
       }
 
-      // Write tasks in parallel
-      for (const t of tasks ?? []) {
-        writes.push(ctx.apiClient.addTask(pid, t));
-        tracker.record({ kind: 'task', summary: t.title });
+      // Only what was actually persisted counts as synced: if the digest
+      // failed, keep every pending write; otherwise keep just the failed items
+      // so the reminder footer and the shutdown auto-digest still cover them.
+      const digestFailed = failures.some((f) => f.item.kind === 'digest');
+      if (!digestFailed) tracker.markSynced();
+      for (const f of failures) {
+        if (f.item.kind !== 'digest') tracker.record({ kind: f.item.kind, summary: f.item.label });
       }
 
-      // Write events in parallel
-      for (const e of events ?? []) {
-        writes.push(ctx.apiClient.addEvent(pid, e));
-        tracker.record({ kind: 'event', summary: `[${e.type}] ${e.summary}` });
-      }
-
-      const results = await Promise.allSettled(writes);
-      const failed = results.filter((r) => r.status === 'rejected').length;
-
-      tracker.markSynced();
-
+      const count = (kind: Item['kind'], total: number) =>
+        total ? `  ${kind[0].toUpperCase()}${kind.slice(1)}s: ${total - failures.filter((f) => f.item.kind === kind).length}/${total} written.` : '';
       const summary = [
-        `✓ Session memory synced.`,
-        `  Digest written.`,
-        decisions?.length ? `  Decisions: ${decisions.length} written.` : '',
-        tasks?.length    ? `  Tasks: ${tasks.length} written.`          : '',
-        events?.length   ? `  Events: ${events.length} written.`        : '',
-        failed > 0 ? `  ⚠ ${failed} item(s) failed to write — check logs.` : '',
+        failures.length ? '⚠ Session memory partially synced.' : '✓ Session memory synced.',
+        digestFailed ? '  Digest NOT written.' : '  Digest written.',
+        count('decision', decisions?.length ?? 0),
+        count('task', tasks?.length ?? 0),
+        count('event', events?.length ?? 0),
+        failures.length ? '\nFailed items (fix and retry with orbitnest_sync_memory or the add_* tools):' : '',
+        ...failures.map((f) => `  - [${f.item.kind}] ${f.item.label.slice(0, 120)}: ${f.error}`),
       ].filter(Boolean).join('\n');
 
       return { content: [{ type: 'text' as const, text: summary }] };
@@ -220,7 +236,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'Prefer orbitnest_sync_memory at session end to batch-write multiple tasks at once.',
     inputSchema: {
       projectId:       z.string().uuid().optional(),
-      title:           z.string().min(1).max(200),
+      title:           z.string().min(3).max(200),
       detail:          z.string().max(2000).optional(),
       priority:        z.enum(['urgent', 'high', 'medium', 'low']).optional(),
       linkedFeatureId: z.string().uuid().optional(),
@@ -288,7 +304,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'Prefer orbitnest_sync_memory at session end to batch-write multiple decisions at once.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      decision:  z.string().min(1).max(500).describe('The decision, in one sentence'),
+      decision:  z.string().min(3).max(500).describe('The decision, in one sentence'),
       reason:    z.string().max(2000).optional().describe('Why this decision was made'),
       metadata:  z.record(z.unknown()).optional(),
     },
@@ -311,7 +327,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     description: 'Add a feature to the project roadmap. Use when a new feature is identified or planned.',
     inputSchema: {
       projectId:    z.string().uuid().optional(),
-      name:         z.string().min(1).max(200),
+      name:         z.string().min(2).max(200),
       description:  z.string().max(2000).optional(),
       status:       z.enum(['planned', 'in_progress', 'released', 'cancelled']).optional(),
       dependencies: z.array(z.string()).optional(),
@@ -358,8 +374,8 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'Prefer orbitnest_sync_memory to batch-write multiple events at session end.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      type:      z.enum(['deploy', 'bug', 'decision', 'update', 'milestone', 'incident', 'other']),
-      summary:   z.string().min(1).max(500),
+      type:      z.enum(EVENT_TYPES),
+      summary:   z.string().min(3).max(500),
       metadata:  z.record(z.unknown()).optional(),
     },
   }, async ({ projectId, type, summary, metadata }) => {
@@ -384,7 +400,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'Keywords: search memory, recall, find past decision, look up, what did we decide about, history.',
     inputSchema: {
       projectId:  z.string().uuid().optional(),
-      query:      z.string().min(1).max(500),
+      query:      z.string().min(3).max(500),
       sourceType: z.enum(['decision', 'task', 'feature', 'event', 'summary']).optional(),
       limit:      z.number().int().min(1).max(20).optional(),
     },

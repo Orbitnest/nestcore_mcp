@@ -37,7 +37,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Create Function ───
   server.registerTool('orbitnest_create_function', {
-    description: 'Create a new edge function. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug — passing the slug causes a silent 500 error. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
+    description: 'Create a new edge function. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug — passing the slug causes a silent 500 error. Edge function code format: JavaScript or TypeScript (TS is transpiled), no `import` statements, use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
     inputSchema: {
       projectId: z.string().optional(),
       name: z.string().min(1),
@@ -95,7 +95,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Update Function ───
   server.registerTool('orbitnest_update_function', {
-    description: 'Update an edge function\'s source code, description, or timeout. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
+    description: 'Update an edge function\'s source code, description, or timeout. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug. Edge function code format: JavaScript or TypeScript (TS is transpiled), no `import` statements, use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
     inputSchema: {
       projectId: z.string().optional(),
       functionName: z.string(),
@@ -148,19 +148,17 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Get Function Logs ───
   server.registerTool('orbitnest_get_function_logs', {
-    description: 'Retrieve execution logs for a specific edge function.',
+    description: 'Retrieve the most recent execution logs for a specific edge function (use orbitnest_query_logs with logType=edge-functions for time-range filtering).',
     inputSchema: {
       projectId: z.string().optional(),
       functionName: z.string(),
       limit: z.number().optional(),
-      startTime: z.string().optional(),
-      endTime: z.string().optional(),
     },
-  }, async ({ projectId, functionName, limit, startTime, endTime }) => {
+  }, async ({ projectId, functionName, limit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.getFunctionLogs(id, functionName, { limit, startTime, endTime });
+      const result = await ctx.apiClient.getFunctionLogs(id, functionName, { limit });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };

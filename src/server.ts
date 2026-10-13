@@ -93,7 +93,7 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
     const session = sessionService.getSession();
     if (!session.currentProjectId) {
       session.currentProjectId = wsConfig.projectId;
-      session.currentProjectSlug = wsConfig.projectSlug;
+      session.currentProjectSlug = wsConfig.projectSlug ?? null;
       logger.info('Project context loaded from workspace', { projectId: wsConfig.projectId });
     }
   }
@@ -157,7 +157,12 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
         const emit = (obj: unknown) => ({
           contents: [{ uri: 'project://context', mimeType: 'application/json', text: JSON.stringify(obj) }],
         });
-        await sessionService.ensureAuthenticated();
+        try {
+          await sessionService.ensureAuthenticated();
+        } catch {
+          // Clients read this resource every turn — never throw from it.
+          return emit({ error: 'Not signed in. Call orbitnest_admin_signin or orbitnest_login first.' });
+        }
         const session = sessionService.getSession();
         const pid = session.currentProjectId;
         if (!pid) {

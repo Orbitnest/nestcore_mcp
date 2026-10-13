@@ -2,6 +2,15 @@ import { ApiError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import * as EP from './endpoints.js';
 
+export interface LogFilterOpts {
+  level?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+  startTime?: string;
+  endTime?: string;
+}
+
 export interface OrbitNestClientConfig {
   apiUrl: string;
   accessToken: string;
@@ -104,15 +113,51 @@ export class OrbitNestClient {
       throw err;
     }
 
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({ message: response.statusText }));
-      const msg = (errorBody as Record<string, string>).message || response.statusText;
-      throw new ApiError(`API ${method} ${path} failed: ${msg}`, response.status);
-    }
+    await this.throwIfError(response, `API ${method}`, path);
 
     const text = await response.text();
     if (!text) return {} as T;
     return JSON.parse(text) as T;
+  }
+
+  /**
+   * Like request() but returns the raw Response (after the error check) for
+   * non-JSON bodies — file downloads and CSV exports.
+   */
+  private async requestRaw(path: string, query?: Record<string, string>): Promise<Response> {
+    let url = `${this.baseUrl}${path}`;
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(query ?? {}).filter(([, v]) => v !== undefined && v !== '')),
+    ).toString();
+    if (qs) url += `?${qs}`;
+    const headers: Record<string, string> = {};
+    if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
+    let response: Response;
+    try {
+      response = await fetch(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        throw new ApiError(`API GET ${path} timed out after ${REQUEST_TIMEOUT_MS}ms`, 504);
+      }
+      throw err;
+    }
+    await this.throwIfError(response, 'API GET', path);
+    return response;
+  }
+
+  private async throwIfError(response: Response, label: string, path: string): Promise<void> {
+    if (response.ok) return;
+    const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+    let msg: unknown = (errorBody as Record<string, unknown>).message || response.statusText;
+    if (Array.isArray(msg)) msg = msg.join('; ');
+    let text = `${label} ${path} failed: ${msg}`;
+    if (response.status === 403 && /restricted to the project owner/i.test(String(msg))) {
+      text +=
+        '. Raw SQL (execute_sql, create_table, migrations), drop table, RLS enable/disable and policy create/delete ' +
+        'are limited to the user who created the project. Browsing and row edits work for every workspace member; ' +
+        'ask the project owner to run this operation.';
+    }
+    throw new ApiError(text, response.status);
   }
 
   /**
@@ -146,11 +191,7 @@ export class OrbitNestClient {
       }
       throw err;
     }
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({ message: response.statusText }));
-      const msg = (errorBody as Record<string, string>).message || response.statusText;
-      throw new ApiError(`Upload ${path} failed: ${msg}`, response.status);
-    }
+    await this.throwIfError(response, 'Upload', path);
     const text = await response.text();
     if (!text) return {} as T;
     return JSON.parse(text) as T;
@@ -176,18 +217,20 @@ export class OrbitNestClient {
     return res;
   }
 
-  async signup(email: string, password: string, name?: string) {
-    return this.request<Record<string, unknown>>('POST', EP.AUTH.SIGNUP, { email, password, name }, { noAuth: true });
+  // Signup DTOs: CreateAdminDto { full_name, email, password } and
+  // CompleteSignupDto { full_name, email, password, code } — unknown keys are 400.
+  async signup(email: string, password: string, fullName: string) {
+    return this.request<Record<string, unknown>>('POST', EP.AUTH.SIGNUP, { full_name: fullName, email, password }, { noAuth: true });
   }
 
-  async signupWithVerification(email: string, password: string, verificationCode: string) {
+  async signupWithVerification(email: string, password: string, fullName: string, code: string) {
     return this.request<Record<string, unknown>>('POST', EP.AUTH.SIGNUP_WITH_VERIFICATION, {
-      email, password, verification_code: verificationCode,
+      full_name: fullName, email, password, code,
     }, { noAuth: true });
   }
 
-  async requestVerification(email: string, password: string, name?: string) {
-    return this.request<Record<string, unknown>>('POST', EP.AUTH.REQUEST_VERIFICATION, { email, password, name }, { noAuth: true });
+  async requestVerification(email: string, password: string, fullName: string) {
+    return this.request<Record<string, unknown>>('POST', EP.AUTH.REQUEST_VERIFICATION, { full_name: fullName, email, password }, { noAuth: true });
   }
 
   async refreshToken(refreshToken: string) {
@@ -227,16 +270,24 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('GET', EP.ADMIN.GET(adminId));
   }
 
-  async updateAdmin(adminId: string, data: { email?: string; isActive?: boolean }) {
+  /** Self only. An email change requires `current_password` and revokes all sessions. */
+  async updateAdmin(adminId: string, data: { full_name?: string; email?: string; current_password?: string }) {
     return this.request<Record<string, unknown>>('PATCH', EP.ADMIN.UPDATE(adminId), data);
+  }
+
+  /** Activate / deactivate a workspace member (admin role). */
+  async setAdminActive(adminId: string, isActive: boolean) {
+    return this.request<Record<string, unknown>>('PATCH', EP.ADMIN.SET_ACTIVE(adminId), { is_active: isActive });
   }
 
   async deleteAdmin(adminId: string) {
     return this.request<Record<string, unknown>>('DELETE', EP.ADMIN.DELETE(adminId));
   }
 
-  async updateAdminPassword(adminId: string, newPassword: string) {
-    return this.request<Record<string, unknown>>('PATCH', EP.ADMIN.UPDATE_PASSWORD(adminId), { new_password: newPassword });
+  async updateAdminPassword(adminId: string, currentPassword: string, newPassword: string) {
+    return this.request<Record<string, unknown>>('PATCH', EP.ADMIN.UPDATE_PASSWORD(adminId), {
+      current_password: currentPassword, new_password: newPassword,
+    });
   }
 
   // Admin Panel
@@ -357,9 +408,10 @@ export class OrbitNestClient {
     opts?: { page?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string; filter?: string }
   ) {
     const query: Record<string, string> = {};
-    if (opts?.page !== undefined) query['page'] = String(opts.page);
+    // The route is page-based (no `offset`); translate offset → page (API default limit 20).
+    const page = opts?.page ?? (opts?.offset ? Math.floor(opts.offset / (opts.limit ?? 20)) + 1 : undefined);
+    if (page !== undefined) query['page'] = String(page);
     if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
-    if (opts?.offset !== undefined) query['offset'] = String(opts.offset);
     if (opts?.orderBy) query['orderBy'] = opts.orderBy;
     if (opts?.orderDirection) query['orderDirection'] = opts.orderDirection;
     if (opts?.filter) query['filter'] = opts.filter;
@@ -477,11 +529,10 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>(method, EP.FUNCTIONS.INVOKE(projectId, name), body);
   }
 
-  async getFunctionLogs(projectId: string, name: string, opts?: { limit?: number; startTime?: string; endTime?: string }) {
+  // The route only reads `limit`.
+  async getFunctionLogs(projectId: string, name: string, opts?: { limit?: number }) {
     const query: Record<string, string> = {};
     if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
-    if (opts?.startTime) query['startTime'] = opts.startTime;
-    if (opts?.endTime) query['endTime'] = opts.endTime;
     return this.request<unknown[]>('GET', EP.FUNCTIONS.LOGS(projectId, name), undefined, { query });
   }
 
@@ -603,8 +654,11 @@ export class OrbitNestClient {
     return this.uploadMultipart<Record<string, unknown>>(EP.STORAGE.UPLOAD(projectSlug, bucketName), data);
   }
 
+  /** The route streams the raw file bytes (not JSON). */
   async downloadFile(projectSlug: string, bucketName: string, filePath: string) {
-    return this.request<Record<string, unknown>>('GET', EP.STORAGE.DOWNLOAD(projectSlug, bucketName, filePath));
+    const res = await this.requestRaw(EP.STORAGE.DOWNLOAD(projectSlug, bucketName, filePath));
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return { contentType: res.headers.get('content-type') ?? 'application/octet-stream', bytes };
   }
 
   async deleteFiles(projectSlug: string, bucketName: string, paths: string[]) {
@@ -621,21 +675,24 @@ export class OrbitNestClient {
 
   // ─── Logging ───
 
-  async getLogs(projectId: string, opts?: { level?: string; search?: string; limit?: number; offset?: number; startTime?: string; endTime?: string }) {
+  // Every log route takes the same LogFiltersDto (snake_case; unknown keys → 400).
+  private logQuery(opts?: LogFilterOpts): Record<string, string> {
     const query: Record<string, string> = {};
     if (opts?.level) query['level'] = opts.level;
     if (opts?.search) query['search'] = opts.search;
     if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
     if (opts?.offset !== undefined) query['offset'] = String(opts.offset);
-    if (opts?.startTime) query['startTime'] = opts.startTime;
-    if (opts?.endTime) query['endTime'] = opts.endTime;
-    return this.request<Record<string, unknown>>('GET', EP.LOGS.ALL(projectId), undefined, { query });
+    if (opts?.startTime) query['start_time'] = opts.startTime;
+    if (opts?.endTime) query['end_time'] = opts.endTime;
+    return query;
   }
 
-  async getDatabaseLogs(projectId: string, opts?: { limit?: number }) {
-    const query: Record<string, string> = {};
-    if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
-    return this.request<Record<string, unknown>>('GET', EP.LOGS.DATABASE(projectId), undefined, { query });
+  async getLogs(projectId: string, opts?: LogFilterOpts) {
+    return this.request<Record<string, unknown>>('GET', EP.LOGS.ALL(projectId), undefined, { query: this.logQuery(opts) });
+  }
+
+  async getDatabaseLogs(projectId: string, opts?: LogFilterOpts) {
+    return this.request<Record<string, unknown>>('GET', EP.LOGS.DATABASE(projectId), undefined, { query: this.logQuery(opts) });
   }
 
   async getSlowQueryLogs(projectId: string, opts?: { limit?: number }) {
@@ -644,24 +701,20 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('GET', EP.LOGS.DATABASE_SLOW(projectId), undefined, { query });
   }
 
-  async getAuthLogs(projectId: string, opts?: { limit?: number }) {
-    const query: Record<string, string> = {};
-    if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
-    return this.request<Record<string, unknown>>('GET', EP.LOGS.AUTH(projectId), undefined, { query });
+  async getAuthLogs(projectId: string, opts?: LogFilterOpts) {
+    return this.request<Record<string, unknown>>('GET', EP.LOGS.AUTH(projectId), undefined, { query: this.logQuery(opts) });
   }
 
-  async getEdgeFunctionLogs(projectId: string, opts?: { limit?: number }) {
-    const query: Record<string, string> = {};
-    if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
-    return this.request<Record<string, unknown>>('GET', EP.LOGS.EDGE_FUNCTIONS(projectId), undefined, { query });
+  async getEdgeFunctionLogs(projectId: string, opts?: LogFilterOpts) {
+    return this.request<Record<string, unknown>>('GET', EP.LOGS.EDGE_FUNCTIONS(projectId), undefined, { query: this.logQuery(opts) });
   }
 
-  async exportLogs(projectId: string, opts?: { format?: string; startTime?: string; endTime?: string }) {
-    const query: Record<string, string> = {};
+  /** The export route streams a file (a JSON array, or CSV), so it is returned as text. */
+  async exportLogs(projectId: string, opts?: LogFilterOpts & { format?: 'json' | 'csv' }) {
+    const query = this.logQuery(opts);
     if (opts?.format) query['format'] = opts.format;
-    if (opts?.startTime) query['startTime'] = opts.startTime;
-    if (opts?.endTime) query['endTime'] = opts.endTime;
-    return this.request<Record<string, unknown>>('GET', EP.LOGS.EXPORT(projectId), undefined, { query });
+    const res = await this.requestRaw(EP.LOGS.EXPORT(projectId), query);
+    return { truncated: res.headers.get('x-export-truncated') === 'true', body: await res.text() };
   }
 
   async getLogStats(projectId: string) {

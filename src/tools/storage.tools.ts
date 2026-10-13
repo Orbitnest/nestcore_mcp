@@ -4,6 +4,8 @@ import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectSlug } from '../utils/validators.js';
 
+const MAX_DOWNLOAD_BYTES = 1024 * 1024;
+
 export function registerStorageTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── List Buckets ───
@@ -25,7 +27,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
 
   // ─── Create Bucket ───
   server.registerTool('orbitnest_create_bucket', {
-    description: 'Create a new storage bucket.',
+    description: 'Create a storage bucket. public=true makes its files readable without a user token; if omitted, a new bucket is private and an existing one keeps its visibility.',
     inputSchema: {
       projectSlug: z.string().optional(),
       bucketName: z.string().min(1),
@@ -122,7 +124,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
 
   // ─── Download File ───
   server.registerTool('orbitnest_download_file', {
-    description: 'Download a file from a storage bucket.',
+    description: 'Download a file from a storage bucket. Text files (text/*, JSON, XML, CSV, JS, SVG) come back as text; anything else as base64. Files over 1 MB return only their metadata.',
     inputSchema: {
       projectSlug: z.string().optional(),
       bucketName: z.string(),
@@ -132,9 +134,18 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
     try {
       await ctx.session.ensureAuthenticated();
       const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
-      const result = await ctx.apiClient.downloadFile(slug, bucketName, filePath);
+      const { contentType, bytes } = await ctx.apiClient.downloadFile(slug, bucketName, filePath);
+      const meta = { filePath, contentType, size: bytes.length };
+      // Keep the model's context bounded.
+      if (bytes.length > MAX_DOWNLOAD_BYTES) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ ...meta, note: 'File too large to return inline (limit 1 MB).' }, null, 2) }] };
+      }
+      const isText = /^text\/|json|xml|csv|javascript|svg/i.test(contentType);
+      const payload = isText
+        ? { ...meta, encoding: 'utf8', content: bytes.toString('utf8') }
+        : { ...meta, encoding: 'base64', content: bytes.toString('base64') };
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);

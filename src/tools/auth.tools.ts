@@ -70,11 +70,11 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Admin Sign Up (direct) ───
   server.registerTool('orbitnest_admin_signup', {
-    description: 'Create a new OrbitNest admin account directly.',
-    inputSchema: { email: z.string().email(), password: z.string().min(8), name: z.string().optional() },
-  }, async ({ email, password, name }) => {
+    description: 'Create a new OrbitNest admin account directly. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
+    inputSchema: { email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1).max(100) },
+  }, async ({ email, password, fullName }) => {
     try {
-      const result = await ctx.apiClient.signup(email, password, name);
+      const result = await ctx.apiClient.signup(email, password, fullName);
       ctx.session.setAuthFromSignin(result);
       // HIGH-03: never echo the raw signin response — it carries the access +
       // long-lived refresh token, which would land in the model's context /
@@ -95,11 +95,16 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Admin Sign Up (with verification) ───
   server.registerTool('orbitnest_admin_signup_verified', {
-    description: 'Complete admin signup with email verification code. First call orbitnest_request_verification to get the code.',
-    inputSchema: { email: z.string().email(), password: z.string().min(8), verificationCode: z.string().min(1) },
-  }, async ({ email, password, verificationCode }) => {
+    description: 'Complete admin signup with the 4-digit email verification code. First call orbitnest_request_verification (same email, password and fullName) to get the code.',
+    inputSchema: {
+      email: z.string().email(),
+      password: z.string().min(8),
+      fullName: z.string().min(1).max(100),
+      verificationCode: z.string().regex(/^\d{4}$/, 'The verification code is 4 digits'),
+    },
+  }, async ({ email, password, fullName, verificationCode }) => {
     try {
-      const result = await ctx.apiClient.signupWithVerification(email, password, verificationCode);
+      const result = await ctx.apiClient.signupWithVerification(email, password, fullName, verificationCode);
       ctx.session.setAuthFromSignin(result);
       // HIGH-03: strip tokens from the tool output (see orbitnest_admin_signup).
       const { email: sessionEmail } = ctx.session.getSession();
@@ -117,11 +122,11 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Request Verification Code ───
   server.registerTool('orbitnest_request_verification', {
-    description: 'Request an email verification code for admin signup.',
-    inputSchema: { email: z.string().email(), password: z.string().min(8), name: z.string().optional() },
-  }, async ({ email, password, name }) => {
+    description: 'Request an email verification code for admin signup. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
+    inputSchema: { email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1).max(100) },
+  }, async ({ email, password, fullName }) => {
     try {
-      const result = await ctx.apiClient.requestVerification(email, password, name);
+      const result = await ctx.apiClient.requestVerification(email, password, fullName);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           success: true,
@@ -157,21 +162,29 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
     description: 'Sign out the current admin user and clear stored credentials.',
     inputSchema: {},
   }, async () => {
+    // Revoke the server session best-effort, but ALWAYS clear local state — an
+    // expired refresh token must not make signing out impossible.
+    let revoked = false;
     try {
       await ctx.session.ensureAuthenticated();
       const refreshToken = ctx.session.getSession().refreshToken;
-      if (refreshToken) await ctx.apiClient.signout(refreshToken);
-      ctx.session.clearSession();
-      clearCredentials();
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          success: true,
-          message: 'Signed out successfully',
-        }, null, 2) }],
-      };
-    } catch (error) {
-      return formatErrorResponse(error);
+      if (refreshToken) {
+        await ctx.apiClient.signout(refreshToken);
+        revoked = true;
+      }
+    } catch {
+      /* fall through to local cleanup */
     }
+    ctx.session.clearSession();
+    clearCredentials();
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({
+        success: true,
+        message: revoked
+          ? 'Signed out successfully'
+          : 'Local credentials cleared. The server session could not be revoked (it was already invalid or expires on its own).',
+      }, null, 2) }],
+    };
   });
 
   // ─── Get Profile ───

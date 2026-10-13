@@ -1,6 +1,7 @@
 import type { McpSession, DatabaseSchema, ProjectMetadata } from '../types/session.types.js';
 import type { AppConfig } from '../types/config.types.js';
-import { loadCredentials, saveCredentials } from './credentials.service.js';
+import { loadCredentials, saveCredentials, withCredentialsLock } from './credentials.service.js';
+import type { StoredCredentials } from '../types/session.types.js';
 import { needsRefresh, getTokenExpiry, decodeTokenPayload } from './token.service.js';
 import { OrbitNestClient } from '../sdk/orbitnest.client.js';
 import { AuthenticationError } from '../utils/errors.js';
@@ -22,7 +23,6 @@ export class SessionService {
       tokenExpiresAt: null,
       currentProjectId: config.defaultProjectId,
       currentProjectSlug: null,
-      environment: config.defaultEnvironment,
       schemaSnapshot: null,
       projectMetadata: null,
       apiUrl: config.apiUrl,
@@ -86,36 +86,55 @@ export class SessionService {
     }
 
     try {
-      logger.info('Refreshing access token...');
-      const result = await this.apiClient.refreshToken(this.session.refreshToken);
-      const accessToken = result.access_token as string;
-      const expiresIn = result.expires_in as number;
+      // CRITICAL: the server ROTATES refresh tokens and, when a consumed one is
+      // replayed, revokes EVERY session of the admin (Studio, CLI, all MCPs).
+      // Another process (a second MCP server, the CLI) shares this credentials
+      // file, so rotate only while holding the shared lock, and first re-read
+      // the file: if someone else already rotated, adopt their tokens instead
+      // of replaying our now-consumed one.
+      await withCredentialsLock(async () => {
+        const disk = loadCredentials();
+        if (disk?.access_token && disk.refresh_token && disk.refresh_token !== this.session.refreshToken) {
+          this.adoptCredentials(disk);
+          if (!needsRefresh(disk.access_token, this.config.tokenRefreshThreshold)) {
+            logger.info('Adopted access token rotated by another OrbitNest client');
+            return;
+          }
+        }
 
-      // CRITICAL: the server ROTATES refresh tokens — every successful refresh
-      // consumes the presented refresh token and issues a fresh one. We must
-      // persist the new refresh_token; otherwise the next refresh replays the
-      // now-invalidated token, fails with 401, and the user is forced to sign
-      // in again every session. (This was the "MCP is down every time" bug.)
-      // Fall back to the existing token only if the server didn't return one.
-      const newRefreshToken = (result.refresh_token as string | undefined) ?? this.session.refreshToken;
+        logger.info('Refreshing access token...');
+        const result = await this.apiClient.refreshToken(this.session.refreshToken!);
+        const accessToken = result.access_token as string;
+        const expiresIn = result.expires_in as number;
+        // Fall back to the existing token only if the server didn't return one.
+        const newRefreshToken = (result.refresh_token as string | undefined) ?? this.session.refreshToken!;
 
-      this.session.accessToken = accessToken;
-      this.session.refreshToken = newRefreshToken;
-      this.session.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
-      this.apiClient.setAccessToken(accessToken);
+        this.session.accessToken = accessToken;
+        this.session.refreshToken = newRefreshToken;
+        this.session.tokenExpiresAt = expiresIn
+          ? new Date(Date.now() + expiresIn * 1000)
+          : getTokenExpiry(accessToken) ?? new Date(Date.now() + 15 * 60 * 1000);
+        this.apiClient.setAccessToken(accessToken);
 
-      saveCredentials({
-        access_token: accessToken,
-        refresh_token: newRefreshToken,
-        expires_at: this.session.tokenExpiresAt.toISOString(),
-        user: { id: this.session.userId!, email: this.session.email! },
+        saveCredentials({
+          access_token: accessToken,
+          refresh_token: newRefreshToken,
+          expires_at: this.session.tokenExpiresAt.toISOString(),
+          user: { id: this.session.userId!, email: this.session.email! },
+        });
+        logger.info('Access token refreshed successfully');
       });
-
-      logger.info('Access token refreshed successfully');
     } catch (err) {
       logger.error('Token refresh failed', { error: String(err) });
       throw new AuthenticationError('Token refresh failed. Please sign in again.');
     }
+  }
+
+  private adoptCredentials(c: StoredCredentials): void {
+    this.session.accessToken = c.access_token;
+    this.session.refreshToken = c.refresh_token;
+    this.session.tokenExpiresAt = c.expires_at ? new Date(c.expires_at) : getTokenExpiry(c.access_token);
+    this.apiClient.setAccessToken(c.access_token);
   }
 
   setAuthFromSignin(data: Record<string, unknown>): void {
@@ -160,6 +179,7 @@ export class SessionService {
     this.apiClient.setAccessToken(this.session.accessToken);
 
     saveCredentials({
+      apiUrl: this.config.apiUrl,
       access_token: this.session.accessToken,
       refresh_token: this.session.refreshToken,
       expires_at: this.session.tokenExpiresAt.toISOString(),

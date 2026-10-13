@@ -8,7 +8,7 @@ export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolC
 
   server.registerPrompt('orbitnest_load_project', {
     description:
-      'Load the full project intelligence context and orient yourself for the session. ' +
+      'Load the project intelligence context (lean AI view) and orient yourself for the session. ' +
       'Run this at the start of every work session before calling any other tool.',
     argsSchema: {
       projectId: z.string().uuid().optional().describe('Project ID (uses the active project if omitted)'),
@@ -19,8 +19,9 @@ export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolC
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const context = await ctx.apiClient.getProjectContext(pid, {
+        // The lean, token-budgeted view — the full view can overflow the context window.
+        view: 'ai',
         includeSchema: includeSchema === 'true',
-        events: 20,
       });
       const text = [
         '# Project Intelligence Context',
@@ -52,7 +53,7 @@ export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolC
         '',
         '---',
         'You are now oriented. Proceed with the session keeping these constraints, decisions, and tasks in mind.',
-        'At the end of the session, call orbitnest_set_project_profile with a digest of what was accomplished.',
+        'At the end of the session, call orbitnest_sync_memory with a structured digest plus any unsaved decisions, tasks and events.',
       ].join('\n');
       return {
         messages: [{ role: 'user' as const, content: { type: 'text' as const, text } }],

@@ -1,7 +1,7 @@
 /**
  * Tracks writes made during the current MCP session so we can:
  *   1. Remind the AI to sync at session end (via tool response footers)
- *   2. Auto-write a partial digest on SIGTERM / SIGINT
+ *   2. Auto-write a partial digest when the session ends (stdin close / SIGTERM / SIGINT)
  */
 export interface TrackedWrite {
   kind: 'decision' | 'task' | 'event' | 'feature' | 'complete';
@@ -43,16 +43,24 @@ export class SessionTracker {
     return lines.join('\n');
   }
 
-  /** Auto-digest text for SIGTERM writes */
+  /**
+   * Auto-digest written on shutdown, in the same structured shape as
+   * orbitnest_sync_memory (`{ v:1, kind:'session_digest', ... }`) so Studio
+   * renders it and it doesn't replace a structured digest with prose.
+   */
   autoDigest(): string {
-    const lines = [
-      'Auto-generated session digest (process shutdown detected).',
-      '',
-      'Changes recorded this session:',
-      this.pendingSummary(),
-    ];
-    if (this.lastDigestAt) lines.push(`\nPrevious digest written at: ${this.lastDigestAt}`);
-    return lines.join('\n');
+    // Bounded well under the API's 10,000-char digest limit.
+    const done = this.writes.slice(-30).map((w) => ({ title: `[${w.kind}] ${w.summary}`.slice(0, 200) }));
+    return JSON.stringify({
+      v: 1,
+      kind: 'session_digest',
+      date: new Date().toISOString().slice(0, 10),
+      title: 'Auto-saved session (ended before orbitnest_sync_memory)',
+      summary:
+        `The MCP session closed with ${this.writes.length} unsynced change(s).` +
+        (this.lastDigestAt ? ` Previous digest written at ${this.lastDigestAt}.` : ''),
+      done,
+    });
   }
 
   /** Footer to append to tool responses when there are pending writes */

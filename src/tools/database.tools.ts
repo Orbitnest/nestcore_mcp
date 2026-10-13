@@ -10,7 +10,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Get Schema ───
   server.registerTool('orbitnest_get_schema', {
-    description: 'Fetch the complete database schema for a project, including tables, columns, constraints, indexes, and RLS status. Results are cached for 5 minutes.',
+    description: 'Fetch the database schema for a project: tables, columns (type, nullability, default, key constraint) and whether RLS is enabled. Results are cached for 5 minutes.',
     inputSchema: { projectId: z.string().optional(), forceRefresh: z.boolean().optional() },
   }, async ({ projectId, forceRefresh }) => {
     try {
@@ -26,7 +26,6 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
             columns: t.columns,
             rlsEnabled: t.rlsEnabled,
             isAuthTable: t.isAuthTable,
-            estimatedRows: t.estimatedRows,
           })),
           lastUpdated: schema.lastUpdated,
         }, null, 2) }],
@@ -127,12 +126,12 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Get Table Data ───
   server.registerTool('orbitnest_get_table_data', {
-    description: 'Retrieve data from a table with optional filtering, ordering, and pagination.',
+    description: 'Retrieve rows from a table with ordering and pagination (max 100 rows per call; offset should be a multiple of limit).',
     inputSchema: {
       projectId: z.string().optional(),
       tableName: z.string(),
-      limit: z.number().optional(),
-      offset: z.number().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      offset: z.number().int().min(0).optional(),
       orderBy: z.string().optional(),
     },
   }, async ({ projectId, tableName, limit, offset, orderBy }) => {
