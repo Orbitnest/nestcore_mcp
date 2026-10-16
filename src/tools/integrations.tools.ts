@@ -25,6 +25,31 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
+  // ─── AI gateway ───
+  server.registerTool('orbitnest_get_ai_settings', {
+    description: 'AI gateway settings of a project: saved provider keys (masked, last 4 characters), default models and monthly spend caps.',
+    inputSchema: { projectId: z.string().optional() },
+  }, async ({ projectId }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.getAiSettings(pid(projectId)));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_ai_usage', {
+    description: "AI gateway usage of a project with its own keys: calls, errors, tokens and cost for the last N days, per day, per model and top end users.",
+    inputSchema: { projectId: z.string().optional(), days: z.number().int().min(1).max(365).optional() },
+  }, async ({ projectId, days }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.getAiUsage(pid(projectId), days ?? 30));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
   // ─── Webhooks ───
   server.registerTool('orbitnest_list_webhooks', {
     description: 'List the database webhooks configured for a project.',

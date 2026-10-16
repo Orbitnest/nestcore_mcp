@@ -353,6 +353,20 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.CONNECTION(projectId));
   }
 
+  // ── AI gateway (read-only: keys come back masked) ──
+  async getAiSettings(projectId: string) {
+    const [providers, caps] = await Promise.all([
+      this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_PROVIDERS(projectId)),
+      this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_CAPS(projectId)),
+    ]);
+    return { providers: providers.data, caps: caps.data };
+  }
+
+  async getAiUsage(projectId: string, days = 30) {
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_USAGE(projectId, days));
+    return res.data;
+  }
+
   async listWebhooks(projectId: string) {
     return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.WEBHOOKS(projectId));
   }
