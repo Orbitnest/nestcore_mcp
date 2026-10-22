@@ -73,6 +73,7 @@ export const ADMIN_INTEGRATIONS = {
   WEBHOOK_TEST: (id: string, wid: string) => `/admin/projects/${e(id)}/webhooks/${e(wid)}/test`,
   SMS_CONFIG: (id: string) => `/admin/projects/${e(id)}/sms-config`,
   SMS_TEST: (id: string) => `/admin/projects/${e(id)}/sms-config/test`,
+  AUTH_SETTINGS: (id: string) => `/projects/${e(id)}/auth-settings`,
   AI_PROVIDERS: (id: string) => `/projects/${e(id)}/ai/providers`,
   AI_CAPS: (id: string) => `/projects/${e(id)}/ai/caps`,
   AI_USAGE: (id: string, days: number) => `/projects/${e(id)}/ai/usage?days=${days}`,

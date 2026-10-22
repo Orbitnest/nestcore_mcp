@@ -332,6 +332,8 @@ All subsequent tools automatically use the active project — you rarely need to
 | Tool | Description |
 |------|-------------|
 | `orbitnest_get_connection_string` | Get the direct Postgres connection string (when enabled) |
+| `orbitnest_get_auth_security` | End-user auth limits in force (code length, wrong codes, codes per hour, lockout) |
+| `orbitnest_set_auth_security` | Change those limits (admin) |
 | `orbitnest_get_ai_settings` | AI gateway keys (masked), default models and spend caps |
 | `orbitnest_ai_usage` | AI calls, tokens and cost per day, model and end user |
 | `orbitnest_list_webhooks` | List database webhooks |

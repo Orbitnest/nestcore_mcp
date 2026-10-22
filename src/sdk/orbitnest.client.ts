@@ -353,6 +353,17 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.CONNECTION(projectId));
   }
 
+  // ── End-user auth security (auth_settings) ──
+  async getAuthSecurity(projectId: string) {
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AUTH_SETTINGS(projectId));
+    return res.data;
+  }
+
+  async setAuthSecurity(projectId: string, patch: Record<string, Record<string, number>>) {
+    const res = await this.request<{ data: unknown }>('PUT', EP.ADMIN_INTEGRATIONS.AUTH_SETTINGS(projectId), patch);
+    return res.data;
+  }
+
   // ── AI gateway (read-only: keys come back masked) ──
   async getAiSettings(projectId: string) {
     const [providers, caps] = await Promise.all([

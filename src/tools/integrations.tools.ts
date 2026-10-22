@@ -25,6 +25,48 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
+  // ─── End-user auth security ───
+  server.registerTool('orbitnest_get_auth_security', {
+    description: "A project's end-user auth limits in force: code length, code expiry, wrong codes allowed, codes per email per hour, and password lockout (attempts, minutes).",
+    inputSchema: { projectId: z.string().optional() },
+  }, async ({ projectId }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.getAuthSecurity(pid(projectId)));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_set_auth_security', {
+    description: 'Change end-user auth limits (only the given ones). Applies to every app signing in to the project within 30 seconds. Needs the workspace admin role.',
+    inputSchema: {
+      projectId: z.string().optional(),
+      codeLength: z.number().int().min(6).max(8).optional().describe('Digits in emailed codes'),
+      codeExpiryMinutes: z.number().int().min(1).max(60).optional(),
+      maxWrongCodes: z.number().int().min(1).max(10).optional().describe('Wrong codes before the codes are invalidated for 15 minutes'),
+      codesPerHour: z.number().int().min(1).max(100).optional().describe('Codes per email per hour, all flows together'),
+      lockoutAttempts: z.number().int().min(1).max(50).optional().describe('Wrong passwords before the email is locked'),
+      lockoutMinutes: z.number().int().min(1).max(1440).optional(),
+    },
+  }, async ({ projectId, codeLength, codeExpiryMinutes, maxWrongCodes, codesPerHour, lockoutAttempts, lockoutMinutes }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const patch: Record<string, Record<string, number>> = {};
+      const put = (group: string, key: string, v?: number) => { if (v !== undefined) (patch[group] ??= {})[key] = v; };
+      put('otp_config', 'code_length', codeLength);
+      put('otp_config', 'expiry_minutes', codeExpiryMinutes);
+      put('otp_config', 'max_attempts', maxWrongCodes);
+      put('rate_limiting', 'otp_requests_per_hour', codesPerHour);
+      put('lockout_policy', 'max_failed_attempts', lockoutAttempts);
+      put('lockout_policy', 'lockout_duration_minutes', lockoutMinutes);
+      if (!Object.keys(patch).length) return json({ error: 'Pass at least one setting to change.' });
+      return json(await ctx.apiClient.setAuthSecurity(pid(projectId), patch));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
   // ─── AI gateway ───
   server.registerTool('orbitnest_get_ai_settings', {
     description: 'AI gateway settings of a project: saved provider keys (masked, last 4 characters), default models and monthly spend caps.',
