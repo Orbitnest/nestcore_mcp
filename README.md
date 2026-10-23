@@ -328,7 +328,7 @@ All subsequent tools automatically use the active project — you rarely need to
 | `orbitnest_delete_smtp_settings` | Remove SMTP configuration |
 | `orbitnest_test_smtp_connection` | Test SMTP connectivity |
 
-### Integrations (9 tools)
+### Integrations (13 tools)
 | Tool | Description |
 |------|-------------|
 | `orbitnest_get_connection_string` | Get the direct Postgres connection string (when enabled) |
@@ -344,6 +344,16 @@ All subsequent tools automatically use the active project — you rarely need to
 | `orbitnest_set_sms_config` | Configure Twilio (auth token stored encrypted) |
 | `orbitnest_test_sms` | Send a test SMS |
 | `orbitnest_enable_extension` | Enable a Postgres extension (e.g. `vector` for pgvector) |
+
+### AI data (6 tools)
+| Tool | Description |
+|------|-------------|
+| `orbitnest_ai_overview` | Counts of memories, subjects, collections, documents, threads, messages, traces (24 h) and embedded columns |
+| `orbitnest_list_collections` | Vector collections with model, chunking and document counts |
+| `orbitnest_memory_subjects` | Subjects that have memories (`user:<id>`, `agent:support`, ...) with counts |
+| `orbitnest_list_embeddings` | Automatically embedded columns with progress (rows, embedded, pending, failed, last error) |
+| `orbitnest_ai_traces` | Recent AI calls: model, tokens, cost, latency, status (never prompt text) |
+| `orbitnest_enable_embeddings` | Embed a table's text columns into a `vector(768)` column kept up to date (admin; requires `confirmEnable: true`) |
 
 ### Dashboard (2 tools)
 | Tool | Description |

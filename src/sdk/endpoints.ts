@@ -77,6 +77,12 @@ export const ADMIN_INTEGRATIONS = {
   AI_PROVIDERS: (id: string) => `/projects/${e(id)}/ai/providers`,
   AI_CAPS: (id: string) => `/projects/${e(id)}/ai/caps`,
   AI_USAGE: (id: string, days: number) => `/projects/${e(id)}/ai/usage?days=${days}`,
+  // AI data (memory, collections, threads, traces, automatic embeddings)
+  AI_OVERVIEW: (id: string) => `/projects/${e(id)}/ai/data/overview`,
+  AI_COLLECTIONS: (id: string) => `/projects/${e(id)}/ai/collections`,
+  AI_MEMORY_SUBJECTS: (id: string) => `/projects/${e(id)}/ai/memory/subjects`,
+  AI_TRACES: (id: string) => `/projects/${e(id)}/ai/traces`,
+  EMBEDDINGS: (id: string) => `/projects/${e(id)}/database/embeddings`,
 } as const;
 
 // Projects

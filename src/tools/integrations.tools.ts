@@ -92,6 +92,110 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
+  // ─── AI data: memory, collections, traces, automatic embeddings ───
+  server.registerTool('orbitnest_ai_overview', {
+    description:
+      "Counts of a project's AI data: memories, memory subjects, collections, documents, threads, messages, traces in the last 24 hours " +
+      'and embedded columns. enabled=false (all zeros) means the project has not used an AI feature yet.',
+    inputSchema: { projectId: z.string().optional() },
+  }, async ({ projectId }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.getAiOverview(pid(projectId)));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_list_collections', {
+    description: 'Vector collections of a project: name, embedding model, chunk size/overlap, whether users may add their own documents, and document counts (total and still processing).',
+    inputSchema: { projectId: z.string().optional() },
+  }, async ({ projectId }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.listAiCollections(pid(projectId)));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_memory_subjects', {
+    description: 'Subjects that have AI memories in a project (e.g. "user:<id>", "agent:support"), with memory counts and last update, newest first (up to 100).',
+    inputSchema: {
+      projectId: z.string().optional(),
+      type: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/).optional().describe('Only this subject type, e.g. "user" or "agent"'),
+    },
+  }, async ({ projectId, type }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.listMemorySubjects(pid(projectId), type));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_list_embeddings', {
+    description:
+      'Automatically embedded columns of a project with progress: source columns, model, rows, embedded (with the current model), ' +
+      'pending and failed queue entries, and the last error.',
+    inputSchema: { projectId: z.string().optional() },
+  }, async ({ projectId }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.listEmbeddings(pid(projectId)));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_ai_traces', {
+    description:
+      'Recent AI calls of a project, newest first: kind (chat/embed), caller, model, tokens in/out, cost, latency, status and error. ' +
+      'Prompts and replies are never stored (only a hash). Kept 1/7/30 days on Free/Starter/Pro.',
+    inputSchema: {
+      projectId: z.string().optional(),
+      limit: z.number().int().min(1).max(500).optional().describe('Default 50'),
+      offset: z.number().int().min(0).optional(),
+      status: z.enum(['ok', 'error']).optional(),
+    },
+  }, async ({ projectId, limit, offset, status }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      return json(await ctx.apiClient.getAiTraces(pid(projectId), { limit: limit ?? 50, offset, status }));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  server.registerTool('orbitnest_enable_embeddings', {
+    description:
+      'Embed a table automatically: adds a vector(768) column (default "<first source>_embedding") plus <target>_embed_model and ' +
+      '<target>_embed_hash, a trigger that queues changed rows, and an HNSW index, then backfills existing rows in the background ' +
+      "with the project's own AI provider key (counts against the monthly embedding allowance). The table needs a primary key; " +
+      'ai_* and auth_* tables are refused. Apps then query it with semantic(). Needs the workspace admin role. Requires confirmEnable=true.',
+    inputSchema: {
+      projectId: z.string().optional(),
+      table: z.string().max(63),
+      sourceColumns: z.array(z.string().max(63)).min(1).max(10).describe('Text columns joined (in order) into the embedded text'),
+      targetColumn: z.string().max(50).optional().describe('Vector column name; defaults to <first source>_embedding'),
+      model: z.string().max(200).optional().describe("Embedding model; defaults to the provider's default embedding model"),
+      confirmEnable: z.boolean(),
+    },
+  }, async ({ projectId, table, sourceColumns, targetColumn, model, confirmEnable }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      if (!confirmEnable) {
+        return json({
+          success: false,
+          error: 'Enabling embeddings changes the table (new columns, trigger, index) and spends embedding tokens on every row. Set confirmEnable=true to proceed.',
+        });
+      }
+      return json(await ctx.apiClient.enableEmbeddings(pid(projectId), { table, sourceColumns, targetColumn, model }));
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
   // ─── Webhooks ───
   server.registerTool('orbitnest_list_webhooks', {
     description: 'List the database webhooks configured for a project.',

@@ -378,6 +378,43 @@ export class OrbitNestClient {
     return res.data;
   }
 
+  // ── AI data (memory, collections, traces, automatic embeddings) ──
+  async getAiOverview(projectId: string) {
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_OVERVIEW(projectId));
+    return res.data;
+  }
+
+  async listAiCollections(projectId: string) {
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_COLLECTIONS(projectId));
+    return res.data;
+  }
+
+  async listMemorySubjects(projectId: string, type?: string) {
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_MEMORY_SUBJECTS(projectId), undefined, {
+      query: type ? { type } : {},
+    });
+    return res.data;
+  }
+
+  async getAiTraces(projectId: string, opts: { limit?: number; offset?: number; status?: 'ok' | 'error' } = {}) {
+    const query: Record<string, string> = {};
+    if (opts.limit !== undefined) query.limit = String(opts.limit);
+    if (opts.offset !== undefined) query.offset = String(opts.offset);
+    if (opts.status) query.status = opts.status;
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.AI_TRACES(projectId), undefined, { query });
+    return res.data;
+  }
+
+  async listEmbeddings(projectId: string) {
+    const res = await this.request<{ data: unknown }>('GET', EP.ADMIN_INTEGRATIONS.EMBEDDINGS(projectId));
+    return res.data;
+  }
+
+  async enableEmbeddings(projectId: string, body: { table: string; sourceColumns: string[]; targetColumn?: string; model?: string }) {
+    const res = await this.request<{ data: unknown }>('POST', EP.ADMIN_INTEGRATIONS.EMBEDDINGS(projectId), body);
+    return res.data;
+  }
+
   async listWebhooks(projectId: string) {
     return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.WEBHOOKS(projectId));
   }
