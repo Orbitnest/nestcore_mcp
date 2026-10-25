@@ -22,7 +22,7 @@ The MCP server **never accesses the database directly** — all operations are p
 
 - **Node.js** v18 or later
 - **npm** v9 or later
-- Access to the GitHub repository `Orbitnest/nestcore_mcp` (or install `@nestcore/mcp-server` from npm)
+- Access to the GitHub repository `Orbitnest/nestcore_mcp` (or install `@nestcorehq/mcp-server` from npm)
 - NestCore account — sign in at [nestcore.io](https://nestcore.io)
 
 ---
