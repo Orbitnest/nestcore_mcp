@@ -6,7 +6,7 @@ import { requireProjectId } from '../utils/validators.js';
 
 // ── Structured content schemas ────────────────────────────────────────────────
 // The AI sends STRUCTURED data (not a text blob). We serialize to JSON and store
-// it in the profile's text columns; the Studio UI renders each section cleanly
+// it in the profile's text columns; the console UI renders each section cleanly
 // and the API flattens it to prose for embeddings.
 
 const sessionDigestSchema = z.object({
@@ -53,12 +53,12 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
 
   // ─── Get Project Context ──────────────────────────────────────────────────
   // Keywords: load memory, load context, sync memory, project state, orientation
-  server.registerTool('orbitnest_get_project_context', {
+  server.registerTool('nestcore_get_project_context', {
     description: [
       'Load (or refresh) the project memory and context.',
       'Returns: project summary, tech stack, agent digest, open tasks, active decisions, in-progress/planned features, and recent events.',
       '',
-      'By default this returns a TRIMMED, token-budgeted view (long text truncated, released features and raw event metadata omitted) so it never bloats your context. Pass detail=true for a fuller payload (longer text, released features, more events), or use orbitnest_search_memory to pull specific items in full.',
+      'By default this returns a TRIMMED, token-budgeted view (long text truncated, released features and raw event metadata omitted) so it never bloats your context. Pass detail=true for a fuller payload (longer text, released features, more events), or use nestcore_search_memory to pull specific items in full.',
       '',
       'WHEN TO CALL: Once at session start — before taking any action on the project. Do not re-call unless you need a refresh.',
       '',
@@ -86,7 +86,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
             '',
             '─── NEXT STEPS ───',
             '• Review open tasks and the latest digest.',
-            '• At session end, call orbitnest_sync_memory to save your work.',
+            '• At session end, call nestcore_sync_memory to save your work.',
           ].join('\n'),
         }],
       };
@@ -98,7 +98,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   // ─── Sync Memory (one-call session-end) ───────────────────────────────────
   // Keywords: save memory, sync memory, persist memory, end session, write back,
   //           update project memory, commit session, session digest
-  server.registerTool('orbitnest_sync_memory', {
+  server.registerTool('nestcore_sync_memory', {
     description: [
       'ONE-CALL SESSION-END MEMORY SYNC. Save everything to the project memory in a single call.',
       '',
@@ -128,16 +128,16 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       decisions: z.array(z.object({
         decision: z.string().min(3).max(500).describe('The decision, in one sentence'),
         reason:   z.string().max(2000).optional().describe('Why this decision was made'),
-      })).optional().describe('Decisions made this session not yet written via orbitnest_add_decision'),
+      })).optional().describe('Decisions made this session not yet written via nestcore_add_decision'),
       tasks: z.array(z.object({
         title:    z.string().min(3).max(200),
         detail:   z.string().max(2000).optional(),
         priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
-      })).optional().describe('Follow-up tasks identified this session not yet written via orbitnest_add_task'),
+      })).optional().describe('Follow-up tasks identified this session not yet written via nestcore_add_task'),
       events: z.array(z.object({
         type:    z.enum(EVENT_TYPES),
         summary: z.string().min(3).max(500),
-      })).optional().describe('Notable events not yet written via orbitnest_add_event'),
+      })).optional().describe('Notable events not yet written via nestcore_add_event'),
     },
   }, async ({ projectId, digest, decisions, tasks, events }) => {
     try {
@@ -179,7 +179,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
         count('decision', decisions?.length ?? 0),
         count('task', tasks?.length ?? 0),
         count('event', events?.length ?? 0),
-        failures.length ? '\nFailed items (fix and retry with orbitnest_sync_memory or the add_* tools):' : '',
+        failures.length ? '\nFailed items (fix and retry with nestcore_sync_memory or the add_* tools):' : '',
         ...failures.map((f) => `  - [${f.item.kind}] ${f.item.label.slice(0, 120)}: ${f.error}`),
       ].filter(Boolean).join('\n');
 
@@ -190,7 +190,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Get Recent Changes ───────────────────────────────────────────────────
-  server.registerTool('orbitnest_get_recent_changes', {
+  server.registerTool('nestcore_get_recent_changes', {
     description:
       'Get recent project events since a given timestamp. ' +
       'Use to catch up on what changed since your last session, or to see what happened while you were away.',
@@ -211,7 +211,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Get Open Tasks ───────────────────────────────────────────────────────
-  server.registerTool('orbitnest_get_open_tasks', {
+  server.registerTool('nestcore_get_open_tasks', {
     description: 'Get open tasks (todo + in_progress) for the project, sorted by priority. Use to see what work is pending.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
@@ -229,11 +229,11 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Add Task ─────────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_add_task', {
+  server.registerTool('nestcore_add_task', {
     description:
       'Record a follow-up task or action item in the project memory. ' +
       'Call this IMMEDIATELY when you identify a TODO — do not wait until session end. ' +
-      'Prefer orbitnest_sync_memory at session end to batch-write multiple tasks at once.',
+      'Prefer nestcore_sync_memory at session end to batch-write multiple tasks at once.',
     inputSchema: {
       projectId:       z.string().uuid().optional(),
       title:           z.string().min(3).max(200),
@@ -256,7 +256,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Complete Task ────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_complete_task', {
+  server.registerTool('nestcore_complete_task', {
     description: 'Mark a task as done. Optionally add a completion note.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
@@ -276,7 +276,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Get Decisions ────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_get_decisions', {
+  server.registerTool('nestcore_get_decisions', {
     description:
       'Retrieve stored architectural and product decisions. ' +
       'Always reference these before making design choices to avoid contradicting past decisions.',
@@ -297,11 +297,11 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Add Decision ─────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_add_decision', {
+  server.registerTool('nestcore_add_decision', {
     description:
       'Record an architectural or product decision in the project memory. ' +
       'Call this IMMEDIATELY when a significant technical choice is made (e.g. "use JWT over sessions", "adopt REST over GraphQL"). ' +
-      'Prefer orbitnest_sync_memory at session end to batch-write multiple decisions at once.',
+      'Prefer nestcore_sync_memory at session end to batch-write multiple decisions at once.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
       decision:  z.string().min(3).max(500).describe('The decision, in one sentence'),
@@ -323,7 +323,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Add Feature ──────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_add_feature', {
+  server.registerTool('nestcore_add_feature', {
     description: 'Add a feature to the project roadmap. Use when a new feature is identified or planned.',
     inputSchema: {
       projectId:    z.string().uuid().optional(),
@@ -346,7 +346,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Update Feature ───────────────────────────────────────────────────────
-  server.registerTool('orbitnest_update_feature', {
+  server.registerTool('nestcore_update_feature', {
     description: 'Update a feature status or description (e.g. move in_progress → released after shipping).',
     inputSchema: {
       projectId:   z.string().uuid().optional(),
@@ -366,12 +366,12 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Add Event ────────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_add_event', {
+  server.registerTool('nestcore_add_event', {
     description:
       'Record a significant project event in the timeline (deploy, bug, milestone, incident, etc.). ' +
       'Call IMMEDIATELY when something notable happens — not at session end. ' +
       'This builds the historical context that future sessions read. ' +
-      'Prefer orbitnest_sync_memory to batch-write multiple events at session end.',
+      'Prefer nestcore_sync_memory to batch-write multiple events at session end.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
       type:      z.enum(EVENT_TYPES),
@@ -393,7 +393,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Search Memory ────────────────────────────────────────────────────────
-  server.registerTool('orbitnest_search_memory', {
+  server.registerTool('nestcore_search_memory', {
     description:
       'Semantic search over ALL project memory — decisions, tasks, features, events, and summaries. ' +
       'Use when you need to recall something not surfaced in the context snapshot. ' +
@@ -416,10 +416,10 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   });
 
   // ─── Set Project Profile ──────────────────────────────────────────────────
-  server.registerTool('orbitnest_set_project_profile', {
+  server.registerTool('nestcore_set_project_profile', {
     description: [
       'Update the project profile: summary, tech stack, conventions, and/or session digest.',
-      'Use orbitnest_sync_memory instead when you want to save a digest PLUS decisions/tasks/events in one call.',
+      'Use nestcore_sync_memory instead when you want to save a digest PLUS decisions/tasks/events in one call.',
       'Use this tool directly to set the STRUCTURED project summary or update stack/conventions.',
       '',
       'The summary is STRUCTURED: { description, tagline?, highlights[] } — break key capabilities into',

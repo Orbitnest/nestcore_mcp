@@ -7,7 +7,7 @@ import { requireProjectId } from '../utils/validators.js';
 export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── List realtime tables ───
-  server.registerTool('orbitnest_list_realtime_tables', {
+  server.registerTool('nestcore_list_realtime_tables', {
     description:
       'List all database tables that have realtime (change streaming) enabled for a project. ' +
       'Returns the schema, table name, column allowlist, and when realtime was enabled.',
@@ -28,7 +28,7 @@ export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Enable realtime on a table ───
-  server.registerTool('orbitnest_enable_realtime', {
+  server.registerTool('nestcore_enable_realtime', {
     description:
       'Enable realtime change streaming on a table. Installs a trigger that emits INSERT, ' +
       'UPDATE, and DELETE events over the realtime WebSocket. Cannot be enabled on auth_* ' +
@@ -53,7 +53,7 @@ export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Disable realtime on a table ───
-  server.registerTool('orbitnest_disable_realtime', {
+  server.registerTool('nestcore_disable_realtime', {
     description:
       'Disable realtime change streaming on a table. Drops the trigger and removes the ' +
       'subscription record. Existing subscribers will stop receiving events for this table.',
@@ -76,7 +76,7 @@ export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Broadcast a message ───
-  server.registerTool('orbitnest_broadcast', {
+  server.registerTool('nestcore_broadcast', {
     description:
       'Fan out a broadcast message to every subscriber on the given channel. Broadcast ' +
       "channels don't require a database trigger. The `broadcast:` prefix is added " +

@@ -47,7 +47,7 @@ assert.ok(!text.includes('D'.repeat(1000)), 'task detail leaked into summary');
 assert.strictEqual(out.project, 'split_mate');
 assert.strictEqual(out.counts.openTasks, 5000);
 assert.strictEqual(out.counts.features, 300);
-assert.ok(String(out.note).includes('orbitnest_get_project_context'));
+assert.ok(String(out.note).includes('nestcore_get_project_context'));
 
 // 4. Empty/missing context must not throw and stays tiny.
 const empty = buildCompactSummary({}, 'p', MAX);

@@ -2,10 +2,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
+import { brandEnv } from '../config.js';
 import { requireProjectId } from '../utils/validators.js';
 import { createMigrationRunner, MigrationError, type MigrationSqlClient } from '../migrations/index.js';
 
-const DEFAULT_DIR = process.env.ORBITNEST_MIGRATIONS_DIR ?? 'migrations';
+const DEFAULT_DIR = brandEnv('MIGRATIONS_DIR') ?? 'migrations';
 
 /**
  * Adapt the MCP API client (which throws on failure and returns
@@ -33,7 +34,7 @@ const json = (value: unknown) => ({
 
 export function registerMigrationTools(server: McpServer, ctx: ToolContext): void {
   // ─── Run migrations ───
-  server.registerTool('orbitnest_run_migrations', {
+  server.registerTool('nestcore_run_migrations', {
     description:
       'Apply pending database migrations from the migrations directory, in order, each inside a transaction. ' +
       'Stops on the first failure and never re-runs completed migrations. Pass `migrationId` to run a single migration. ' +
@@ -65,7 +66,7 @@ export function registerMigrationTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── List migrations ───
-  server.registerTool('orbitnest_list_migrations', {
+  server.registerTool('nestcore_list_migrations', {
     description:
       'List every migration file in the migrations directory with its applied/pending/failed status from the registry.',
     inputSchema: {
@@ -85,7 +86,7 @@ export function registerMigrationTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Migration status (summary) ───
-  server.registerTool('orbitnest_migration_status', {
+  server.registerTool('nestcore_migration_status', {
     description:
       'Summarise migration state: counts of applied / pending / failed migrations, any checksum mismatches, and the full per-migration list.',
     inputSchema: {

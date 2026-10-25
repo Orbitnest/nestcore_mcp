@@ -7,8 +7,8 @@ import { requireProjectId } from '../utils/validators.js';
 export function registerProjectTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Create Project ───
-  server.registerTool('orbitnest_create_project', {
-    description: 'Create a new OrbitNest project with a dedicated database. Returns project details including API keys.',
+  server.registerTool('nestcore_create_project', {
+    description: 'Create a new NestCore project with a dedicated database. Returns project details including API keys.',
     inputSchema: { name: z.string().min(3).max(120), description: z.string().max(500).optional() },
   }, async ({ name, description }) => {
     try {
@@ -23,7 +23,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── List Projects ───
-  server.registerTool('orbitnest_list_projects', {
+  server.registerTool('nestcore_list_projects', {
     description: 'List all projects for the authenticated admin user.',
     inputSchema: {},
   }, async () => {
@@ -39,7 +39,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get Project ───
-  server.registerTool('orbitnest_get_project', {
+  server.registerTool('nestcore_get_project', {
     description: 'Get detailed information about a specific project. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -56,7 +56,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Update Project ───
-  server.registerTool('orbitnest_update_project', {
+  server.registerTool('nestcore_update_project', {
     description: 'Update project settings like name or configuration.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -80,7 +80,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Delete Project ───
-  server.registerTool('orbitnest_delete_project', {
+  server.registerTool('nestcore_delete_project', {
     description: 'Delete a project and all associated data. This is irreversible and requires explicit confirmation.',
     inputSchema: { projectId: z.string(), confirmDeletion: z.boolean() },
   }, async ({ projectId, confirmDeletion }) => {
@@ -107,7 +107,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Set Active Project ───
-  server.registerTool('orbitnest_set_active_project', {
+  server.registerTool('nestcore_set_active_project', {
     description: 'Set the active project for the current session. Loads project metadata and caches database schema.',
     inputSchema: { projectId: z.string() },
   }, async ({ projectId }) => {
@@ -144,7 +144,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
           project: { id: project.id, name: project.name, slug: project.slug },
           tablesLoaded,
           ...(schemaWarning ? { warning: schemaWarning } : {}),
-          workspaceConfig: savedTo ?? 'not saved (no .orbitnest/config.json found; run `orbitnest link` in the project directory to persist it)',
+          workspaceConfig: savedTo ?? 'not saved (no .nestcore/config.json found; run `nestcore link` in the project directory to persist it)',
         }, null, 2) }],
       };
     } catch (error) {
@@ -153,7 +153,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Toggle Debug Mode ───
-  server.registerTool('orbitnest_toggle_debug_mode', {
+  server.registerTool('nestcore_toggle_debug_mode', {
     description: 'Enable or disable debug mode for detailed logging on a project.',
     inputSchema: { projectId: z.string().optional(), enabled: z.boolean() },
   }, async ({ projectId, enabled }) => {
@@ -174,7 +174,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Create API Keys ───
-  server.registerTool('orbitnest_create_api_keys', {
+  server.registerTool('nestcore_create_api_keys', {
     description: 'Generate new project API key pair. WARNING: This invalidates all existing keys for the project.',
     inputSchema: { projectId: z.string().optional(), description: z.string().optional() },
   }, async ({ projectId, description }) => {
@@ -191,7 +191,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get API Keys ───
-  server.registerTool('orbitnest_get_api_keys', {
+  server.registerTool('nestcore_get_api_keys', {
     description: 'Get existing API keys for a project.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -208,7 +208,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get Project Health ───
-  server.registerTool('orbitnest_get_project_health', {
+  server.registerTool('nestcore_get_project_health', {
     description: 'Check the health status of a project including database connectivity.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {

@@ -1,11 +1,11 @@
 import type { ProjectMetadata } from '../types/session.types.js';
-import { OrbitNestClient } from '../sdk/orbitnest.client.js';
+import { NestCoreClient } from '../sdk/nestcore.client.js';
 import { logger } from '../utils/logger.js';
 
 export class ProjectService {
-  private apiClient: OrbitNestClient;
+  private apiClient: NestCoreClient;
 
-  constructor(apiClient: OrbitNestClient) {
+  constructor(apiClient: NestCoreClient) {
     this.apiClient = apiClient;
   }
 

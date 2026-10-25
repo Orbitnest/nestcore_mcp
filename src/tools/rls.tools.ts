@@ -8,7 +8,7 @@ import { guardRlsDisable } from '../safety/operation.guard.js';
 export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Get RLS Status ───
-  server.registerTool('orbitnest_get_rls_status', {
+  server.registerTool('nestcore_get_rls_status', {
     description: 'Check if Row-Level Security is enabled on a specific table.',
     inputSchema: { projectId: z.string().optional(), tableName: z.string() },
   }, async ({ projectId, tableName }) => {
@@ -25,7 +25,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Enable RLS ───
-  server.registerTool('orbitnest_enable_rls', {
+  server.registerTool('nestcore_enable_rls', {
     description: 'Enable Row-Level Security on a table. This restricts access to rows based on policies.',
     inputSchema: { projectId: z.string().optional(), tableName: z.string() },
   }, async ({ projectId, tableName }) => {
@@ -42,7 +42,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Disable RLS ───
-  server.registerTool('orbitnest_disable_rls', {
+  server.registerTool('nestcore_disable_rls', {
     description: 'Disable Row-Level Security on a table. Cannot disable RLS on auth tables. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -71,7 +71,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── List Policies ───
-  server.registerTool('orbitnest_list_policies', {
+  server.registerTool('nestcore_list_policies', {
     description: 'List all RLS policies for a specific table.',
     inputSchema: { projectId: z.string().optional(), tableName: z.string() },
   }, async ({ projectId, tableName }) => {
@@ -88,7 +88,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Create Policy ───
-  server.registerTool('orbitnest_create_policy', {
+  server.registerTool('nestcore_create_policy', {
     description: 'Create a new RLS policy on a table. Policies define row-level access rules for different operations and roles.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -115,7 +115,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Delete Policy ───
-  server.registerTool('orbitnest_delete_policy', {
+  server.registerTool('nestcore_delete_policy', {
     description: 'Delete an RLS policy from a table. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),

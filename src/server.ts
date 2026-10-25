@@ -1,13 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { AppConfig } from './types/config.types.js';
-import { OrbitNestClient } from './sdk/orbitnest.client.js';
+import { NestCoreClient } from './sdk/nestcore.client.js';
 import { SessionService } from './auth/session.service.js';
 import { SchemaService } from './context/schema.service.js';
 import { WorkspaceService } from './context/workspace.service.js';
 import { ProjectService } from './context/project.service.js';
 import { SessionTracker } from './context/session-tracker.js';
 import { registerAllTools, type ToolContext } from './tools/index.js';
+import { withLegacyToolNames } from './legacy-tool-names.js';
 import { logger } from './utils/logger.js';
 
 /**
@@ -47,7 +48,7 @@ export function buildCompactSummary(
   description = description.replace(/\s+/g, ' ').slice(0, 280);
 
   const note =
-    'Compact overview only — NOT full memory. Call the orbitnest_get_project_context tool for detail, or orbitnest_search_memory to find specific items.';
+    'Compact overview only — NOT full memory. Call the nestcore_get_project_context tool for detail, or nestcore_search_memory to find specific items.';
 
   const summary: Record<string, unknown> = {
     project: projectName,
@@ -76,8 +77,8 @@ export function buildCompactSummary(
   return summary;
 }
 
-export async function createServer(config: AppConfig): Promise<{ server: McpServer; tracker: SessionTracker; apiClient: OrbitNestClient }> {
-  const apiClient = new OrbitNestClient({ apiUrl: config.apiUrl, accessToken: '' });
+export async function createServer(config: AppConfig): Promise<{ server: McpServer; tracker: SessionTracker; apiClient: NestCoreClient }> {
+  const apiClient = new NestCoreClient({ apiUrl: config.apiUrl, accessToken: '' });
 
   const sessionService = new SessionService(config, apiClient);
   const schemaService = new SchemaService(apiClient, config.schemaCacheTtl);
@@ -99,12 +100,12 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
   }
 
   // ── Register the active project with the tracker ────────────────────────
-  // The workspace marker (.orbitnest/config.json) tells us WHICH project this
+  // The workspace marker (.nestcore/config.json) tells us WHICH project this
   // is; that's the auto-hook. We deliberately do NOT pull the project context
   // here. Embedding a live snapshot into the server instructions inflates the
   // system prompt on every single request — a large stored digest then blows
   // past the model's context limit. Context is pulled on demand instead, once,
-  // via orbitnest_get_project_context.
+  // via nestcore_get_project_context.
   const activeProjectId = sessionService.getSession().currentProjectId;
   if (activeProjectId) tracker.setProject(activeProjectId);
 
@@ -112,18 +113,18 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
   // Surfaced by MCP clients as the server's system instructions — they ride
   // along on every request, so keep them SMALL. Pointers to tools, no data.
   const SESSION_INSTRUCTIONS = [
-    'Persistent memory for OrbitNest projects (Project Intelligence). Pull context on demand; never assume it is already loaded.',
+    'Persistent memory for NestCore projects (Project Intelligence). Pull context on demand; never assume it is already loaded.',
     '',
-    'SESSION START: if no project is set, call orbitnest_list_projects then orbitnest_set_active_project.',
-    'Then call orbitnest_get_project_context ONCE to load this project\'s memory (profile, open tasks, decisions, recent events). Do not call it again unless you need a refresh.',
+    'SESSION START: if no project is set, call nestcore_list_projects then nestcore_set_active_project.',
+    'Then call nestcore_get_project_context ONCE to load this project\'s memory (profile, open tasks, decisions, recent events). Do not call it again unless you need a refresh.',
     '',
     'DURING THE SESSION, write as things happen (not batched at the end):',
-    '  orbitnest_add_decision — an architectural/product decision',
-    '  orbitnest_add_task     — a follow-up / TODO',
-    '  orbitnest_add_event    — a deploy / bug / milestone',
-    '  orbitnest_search_memory — recall anything not in the loaded context',
+    '  nestcore_add_decision — an architectural/product decision',
+    '  nestcore_add_task     — a follow-up / TODO',
+    '  nestcore_add_event    — a deploy / bug / milestone',
+    '  nestcore_search_memory — recall anything not in the loaded context',
     '',
-    'SESSION END: call orbitnest_sync_memory once with a digest (what was done, decisions, blockers, what\'s next) plus any unsaved decisions/tasks/events. Keep the digest concise — a summary, not a transcript or file dumps. Memory is only persisted when you call a tool.',
+    'SESSION END: call nestcore_sync_memory once with a digest (what was done, decisions, blockers, what\'s next) plus any unsaved decisions/tasks/events. Keep the digest concise — a summary, not a transcript or file dumps. Memory is only persisted when you call a tool.',
   ].join('\n');
 
   // ── Create MCP server ────────────────────────────────────────────────────
@@ -138,8 +139,8 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
   // project name, a one-line description, counts, and a pointer to the full
   // tool. It must NEVER serialize the whole project memory (that overflowed the
   // context window: a large project's full context was ~1.7M tokens). Full
-  // detail is pulled deliberately via the orbitnest_get_project_context tool;
-  // specific recall is done via orbitnest_search_memory (vector/FTS) so the AI
+  // detail is pulled deliberately via the nestcore_get_project_context tool;
+  // specific recall is done via nestcore_search_memory (vector/FTS) so the AI
   // skims, not reads everything.
   const RESOURCE_MAX_CHARS = 4000;
   try {
@@ -149,8 +150,8 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
       {
         title: 'Project Intelligence — compact summary',
         description:
-          'Compact orientation summary for the active OrbitNest project (name, one-line description, item counts). ' +
-          'NOT the full memory. Call the orbitnest_get_project_context tool for full detail, or orbitnest_search_memory to find specific items.',
+          'Compact orientation summary for the active NestCore project (name, one-line description, item counts). ' +
+          'NOT the full memory. Call the nestcore_get_project_context tool for full detail, or nestcore_search_memory to find specific items.',
         mimeType: 'application/json',
       },
       async () => {
@@ -161,12 +162,12 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
           await sessionService.ensureAuthenticated();
         } catch {
           // Clients read this resource every turn — never throw from it.
-          return emit({ error: 'Not signed in. Call orbitnest_admin_signin or orbitnest_login first.' });
+          return emit({ error: 'Not signed in. Call nestcore_admin_signin or nestcore_login first.' });
         }
         const session = sessionService.getSession();
         const pid = session.currentProjectId;
         if (!pid) {
-          return emit({ error: 'No active project. Call orbitnest_set_active_project first.' });
+          return emit({ error: 'No active project. Call nestcore_set_active_project first.' });
         }
         try {
           const ctx = await apiClient.getProjectContext(pid, { events: 20 });
@@ -176,7 +177,7 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
           // Never fail the session over an orientation blurb.
           return emit({
             project: session.currentProjectSlug ?? pid,
-            note: 'Context summary unavailable. Call orbitnest_get_project_context for detail.',
+            note: 'Context summary unavailable. Call nestcore_get_project_context for detail.',
           });
         }
       },
@@ -209,7 +210,8 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
 }
 
 export async function startStdioServer(server: McpServer): Promise<void> {
-  const transport = new StdioServerTransport();
+  // Clients that cached the pre-rename `orbitnest_*` tool names keep working.
+  const transport = withLegacyToolNames(new StdioServerTransport());
   await server.connect(transport);
-  logger.info('OrbitNest MCP server running on stdio');
+  logger.info('NestCore MCP server running on stdio');
 }

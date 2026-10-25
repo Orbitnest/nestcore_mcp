@@ -7,7 +7,7 @@ import { requireProjectId } from '../utils/validators.js';
 export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Overview ───
-  server.registerTool('orbitnest_get_analytics_overview', {
+  server.registerTool('nestcore_get_analytics_overview', {
     description: 'Get high-level analytics metrics for a project including events, sessions, DAU, and crashes.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -33,7 +33,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Event Timeseries ───
-  server.registerTool('orbitnest_get_analytics_events', {
+  server.registerTool('nestcore_get_analytics_events', {
     description: 'Get event counts as a timeseries for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -59,7 +59,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Top Events ───
-  server.registerTool('orbitnest_get_top_analytics_events', {
+  server.registerTool('nestcore_get_top_analytics_events', {
     description: 'Get the top events by occurrence count for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -81,7 +81,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Top Screens ───
-  server.registerTool('orbitnest_get_top_analytics_screens', {
+  server.registerTool('nestcore_get_top_analytics_screens', {
     description: 'Get the top screens or pages by view count for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -103,7 +103,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Retention ───
-  server.registerTool('orbitnest_get_analytics_retention', {
+  server.registerTool('nestcore_get_analytics_retention', {
     description: 'Get day-N rolling retention data for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -125,7 +125,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Funnel ───
-  server.registerTool('orbitnest_get_analytics_funnel', {
+  server.registerTool('nestcore_get_analytics_funnel', {
     description: 'Run a funnel analysis across a sequence of event names for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -147,7 +147,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Performance ───
-  server.registerTool('orbitnest_get_analytics_performance', {
+  server.registerTool('nestcore_get_analytics_performance', {
     description: 'Get performance metric percentiles (e.g. load time, response time) for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -173,7 +173,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Crashes ───
-  server.registerTool('orbitnest_get_analytics_crashes', {
+  server.registerTool('nestcore_get_analytics_crashes', {
     description: 'Get crash groups and crash rate data for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -199,7 +199,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Create Token ───
-  server.registerTool('orbitnest_create_analytics_token', {
+  server.registerTool('nestcore_create_analytics_token', {
     description: 'Create an analytics ingestion token for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -219,7 +219,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── List Tokens ───
-  server.registerTool('orbitnest_list_analytics_tokens', {
+  server.registerTool('nestcore_list_analytics_tokens', {
     description: 'List all analytics ingestion tokens for a project.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -238,7 +238,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Revoke Token ───
-  server.registerTool('orbitnest_revoke_analytics_token', {
+  server.registerTool('nestcore_revoke_analytics_token', {
     description: 'Revoke (delete) an analytics ingestion token. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),

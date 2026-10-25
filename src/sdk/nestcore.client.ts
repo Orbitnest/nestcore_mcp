@@ -11,7 +11,7 @@ export interface LogFilterOpts {
   endTime?: string;
 }
 
-export interface OrbitNestClientConfig {
+export interface NestCoreClientConfig {
   apiUrl: string;
   accessToken: string;
 }
@@ -38,11 +38,11 @@ export interface TableDataResponse {
 // (large SQL, uploads) but bounded so the agent never hangs indefinitely.
 const REQUEST_TIMEOUT_MS = 60_000;
 
-export class OrbitNestClient {
+export class NestCoreClient {
   private baseUrl: string;
   private accessToken: string;
 
-  constructor(config: OrbitNestClientConfig) {
+  constructor(config: NestCoreClientConfig) {
     // LOW-02: the admin bearer token rides on every request. Refuse cleartext
     // http to a non-loopback host (it would expose the token to anyone on the
     // network path) and warn on a non-default API host.
@@ -57,12 +57,12 @@ export class OrbitNestClient {
       }
       if (u.protocol !== 'https:') {
         logger.warn(`Using cleartext http API URL (loopback dev only): ${config.apiUrl}`);
-      } else if (u.hostname !== 'api.orbitnest.io') {
-        logger.warn(`Using a non-default OrbitNest API host: ${u.hostname}`);
+      } else if (u.hostname !== 'api.nestcore.io' && u.hostname !== 'api.orbitnest.io') {
+        logger.warn(`Using a non-default NestCore API host: ${u.hostname}`);
       }
     } catch (err) {
       if (err instanceof ApiError) throw err;
-      throw new ApiError(`Invalid ORBITNEST_API_URL: ${config.apiUrl}`, 0);
+      throw new ApiError(`Invalid NESTCORE_API_URL: ${config.apiUrl}`, 0);
     }
     this.baseUrl = `${config.apiUrl}/api`;
     this.accessToken = config.accessToken;
@@ -1019,3 +1019,10 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('PUT', EP.INTELLIGENCE.PROFILE(projectId), data);
   }
 }
+
+/** @deprecated Renamed to {@link NestCoreClient}. */
+export const OrbitNestClient = NestCoreClient;
+/** @deprecated Renamed to {@link NestCoreClient}. */
+export type OrbitNestClient = NestCoreClient;
+/** @deprecated Renamed to {@link NestCoreClientConfig}. */
+export type OrbitNestClientConfig = NestCoreClientConfig;

@@ -1,10 +1,10 @@
 /**
- * Full SDK integration test — imports the REAL compiled OrbitNestClient and
+ * Full SDK integration test — imports the REAL compiled NestCoreClient and
  * exercises every method against the live API using a throwaway project that
  * is deleted at the end. Goal: catch contract drift (wrong body envelope,
  * wrong field names, wrong route) of the kind we just fixed.
  *
- *   EMAIL=ali@orbitnest.io PASSWORD=*** node test/sdk-integration.mjs
+ *   EMAIL=you@example.com PASSWORD=*** node test/sdk-integration.mjs
  *
  * Classification per call:
  *   PASS  - 2xx
@@ -12,9 +12,9 @@
  *           404 route not found) -> a real SDK<->API mismatch
  *   INFO  - other error (business logic: empty analytics, bad fn code, no SMTP)
  */
-import { OrbitNestClient } from '../dist/sdk/orbitnest.client.js';
+import { NestCoreClient } from '../dist/sdk/nestcore.client.js';
 
-const API = process.env.API || 'https://api.orbitnest.io';
+const API = process.env.API || 'https://api.nestcore.io';
 const EMAIL = process.env.EMAIL || 'ali@orbitnest.io';
 const PASSWORD = process.env.PASSWORD;
 if (!PASSWORD) { console.error('Set PASSWORD env var'); process.exit(2); }
@@ -48,7 +48,7 @@ async function run(name, fn) {
 }
 
 async function main() {
-  const client = new OrbitNestClient({ apiUrl: API, accessToken: '' });
+  const client = new NestCoreClient({ apiUrl: API, accessToken: '' });
 
   // ── Auth ──
   const auth = await run('signin', () => client.signin(EMAIL, PASSWORD));
@@ -67,7 +67,7 @@ async function main() {
   // ── Admin reads + invite ──
   // inviteAdmin is the real "add admin" flow (no direct create-with-password
   // endpoint exists). It may INFO if SMTP/SES is down (the invite rolls back).
-  await run('inviteAdmin', () => client.inviteAdmin('sdk-selftest-admin@orbitnest.local'));
+  await run('inviteAdmin', () => client.inviteAdmin('sdk-selftest-admin@nestcore.local'));
   // Read-only admin lookup against our own id. We intentionally do NOT test
   // updateAdmin / deleteAdmin / updateAdminPassword here — the only available
   // target is the signed-in super admin and mutating it would be destructive.

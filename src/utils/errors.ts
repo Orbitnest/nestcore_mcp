@@ -9,7 +9,7 @@ export class McpError extends Error {
 }
 
 export class AuthenticationError extends McpError {
-  constructor(message: string = 'Not authenticated. Please sign in first using orbitnest_admin_signin.') {
+  constructor(message: string = 'Not authenticated. Please sign in first using nestcore_admin_signin.') {
     super(message, 'AUTH_ERROR');
     this.name = 'AuthenticationError';
   }
@@ -43,7 +43,7 @@ export class ApiError extends McpError {
 }
 
 export class ProjectContextError extends McpError {
-  constructor(message: string = 'No active project. Use orbitnest_set_active_project first or provide projectId.') {
+  constructor(message: string = 'No active project. Use nestcore_set_active_project first or provide projectId.') {
     super(message, 'PROJECT_CONTEXT_ERROR');
     this.name = 'ProjectContextError';
   }

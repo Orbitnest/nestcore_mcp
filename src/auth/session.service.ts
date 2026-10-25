@@ -3,16 +3,16 @@ import type { AppConfig } from '../types/config.types.js';
 import { loadCredentials, saveCredentials, withCredentialsLock } from './credentials.service.js';
 import type { StoredCredentials } from '../types/session.types.js';
 import { needsRefresh, getTokenExpiry, decodeTokenPayload } from './token.service.js';
-import { OrbitNestClient } from '../sdk/orbitnest.client.js';
+import { NestCoreClient } from '../sdk/nestcore.client.js';
 import { AuthenticationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
 export class SessionService {
   private session: McpSession;
   private config: AppConfig;
-  private apiClient: OrbitNestClient;
+  private apiClient: NestCoreClient;
 
-  constructor(config: AppConfig, apiClient: OrbitNestClient) {
+  constructor(config: AppConfig, apiClient: NestCoreClient) {
     this.config = config;
     this.apiClient = apiClient;
     this.session = {
@@ -87,7 +87,7 @@ export class SessionService {
 
     try {
       // CRITICAL: the server ROTATES refresh tokens and, when a consumed one is
-      // replayed, revokes EVERY session of the admin (Studio, CLI, all MCPs).
+      // replayed, revokes EVERY session of the admin (console, CLI, all MCPs).
       // Another process (a second MCP server, the CLI) shares this credentials
       // file, so rotate only while holding the shared lock, and first re-read
       // the file: if someone else already rotated, adopt their tokens instead
@@ -97,7 +97,7 @@ export class SessionService {
         if (disk?.access_token && disk.refresh_token && disk.refresh_token !== this.session.refreshToken) {
           this.adoptCredentials(disk);
           if (!needsRefresh(disk.access_token, this.config.tokenRefreshThreshold)) {
-            logger.info('Adopted access token rotated by another OrbitNest client');
+            logger.info('Adopted access token rotated by another NestCore client');
             return;
           }
         }

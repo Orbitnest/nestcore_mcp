@@ -81,7 +81,7 @@ export interface ProjectMetadata {
 }
 
 /**
- * `.orbitnest/config.json`, shared with the OrbitNest CLI. Canonical shape;
+ * `.nestcore/config.json`, shared with the NestCore CLI. Canonical shape;
  * CLI <= 0.5 wrote `slug` instead of `projectSlug`, so readers accept both.
  */
 export interface WorkspaceConfig {
@@ -91,7 +91,7 @@ export interface WorkspaceConfig {
   apiUrl?: string;
 }
 
-/** `~/.orbitnest/credentials.json`, shared with the CLI (which also stores `apiUrl`). */
+/** `~/.nestcore/credentials.json`, shared with the CLI (which also stores `apiUrl`). */
 export interface StoredCredentials {
   apiUrl?: string;
   access_token: string;

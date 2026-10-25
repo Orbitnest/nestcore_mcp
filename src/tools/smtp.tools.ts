@@ -7,7 +7,7 @@ import { requireProjectId } from '../utils/validators.js';
 export function registerSmtpTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Get SMTP Settings ───
-  server.registerTool('orbitnest_get_smtp_settings', {
+  server.registerTool('nestcore_get_smtp_settings', {
     description: 'Get the SMTP email configuration for a project.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -24,7 +24,7 @@ export function registerSmtpTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Update SMTP Settings ───
-  server.registerTool('orbitnest_update_smtp_settings', {
+  server.registerTool('nestcore_update_smtp_settings', {
     description: 'Update the SMTP email configuration for a project.',
     inputSchema: {
       projectId: z.string().optional(),

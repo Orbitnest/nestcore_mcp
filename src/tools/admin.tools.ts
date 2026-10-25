@@ -6,8 +6,8 @@ import { formatErrorResponse, ValidationError } from '../utils/errors.js';
 export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── List Admins ───
-  server.registerTool('orbitnest_list_admins', {
-    description: 'List all admin users in the OrbitNest platform.',
+  server.registerTool('nestcore_list_admins', {
+    description: 'List all admin users in the NestCore platform.',
     inputSchema: {},
   }, async () => {
     try {
@@ -22,7 +22,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Get Admin ───
-  server.registerTool('orbitnest_get_admin', {
+  server.registerTool('nestcore_get_admin', {
     description: 'Get details of a specific admin user.',
     inputSchema: { adminId: z.string() },
   }, async ({ adminId }) => {
@@ -42,7 +42,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   // requires an explicit confirmation flag. NOTE: the platform has no direct
   // create-with-password endpoint by design — a new admin is INVITED by email
   // and sets their own password by accepting the invite. Requires SMTP.
-  server.registerTool('orbitnest_create_admin', {
+  server.registerTool('nestcore_create_admin', {
     description: 'Invite a new admin by email (the platform adds admins via invitation, not direct password creation; requires SMTP configured). Requires confirmCreate=true.',
     inputSchema: {
       email: z.string().email(),
@@ -71,7 +71,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   // ─── Update Admin ───
   // HIGH-02: changing email / active state is identity-mutating (can lock out a
   // legitimate admin), so require an explicit confirmation flag.
-  server.registerTool('orbitnest_update_admin', {
+  server.registerTool('nestcore_update_admin', {
     description:
       'Update an admin. fullName/email can only be changed on YOUR OWN account; an email change needs currentPassword ' +
       'and signs out all of your sessions (including this one). isActive activates/deactivates another workspace member ' +
@@ -116,7 +116,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Delete Admin ───
-  server.registerTool('orbitnest_delete_admin', {
+  server.registerTool('nestcore_delete_admin', {
     description: 'Delete an admin user. Requires confirmation.',
     inputSchema: { adminId: z.string(), confirmDeletion: z.boolean() },
   }, async ({ adminId, confirmDeletion }) => {

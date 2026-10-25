@@ -1,14 +1,14 @@
 import type { DatabaseSchema } from '../types/session.types.js';
-import { OrbitNestClient } from '../sdk/orbitnest.client.js';
+import { NestCoreClient } from '../sdk/nestcore.client.js';
 import { isAuthTable } from '../safety/auth-table.guard.js';
 import { logger } from '../utils/logger.js';
 
 export class SchemaService {
   private cache: Map<string, { schema: DatabaseSchema; fetchedAt: number }> = new Map();
   private ttl: number;
-  private apiClient: OrbitNestClient;
+  private apiClient: NestCoreClient;
 
-  constructor(apiClient: OrbitNestClient, ttlMs: number = 300000) {
+  constructor(apiClient: NestCoreClient, ttlMs: number = 300000) {
     this.apiClient = apiClient;
     this.ttl = ttlMs;
   }

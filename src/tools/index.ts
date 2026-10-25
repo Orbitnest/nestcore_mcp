@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SessionService } from '../auth/session.service.js';
-import { OrbitNestClient } from '../sdk/orbitnest.client.js';
+import { NestCoreClient } from '../sdk/nestcore.client.js';
 import { SchemaService } from '../context/schema.service.js';
 import { WorkspaceService } from '../context/workspace.service.js';
 import { ProjectService } from '../context/project.service.js';
@@ -9,7 +9,7 @@ import type { AppConfig } from '../types/config.types.js';
 
 export interface ToolContext {
   session: SessionService;
-  apiClient: OrbitNestClient;
+  apiClient: NestCoreClient;
   schemaService: SchemaService;
   workspaceService: WorkspaceService;
   projectService: ProjectService;

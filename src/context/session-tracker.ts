@@ -45,7 +45,7 @@ export class SessionTracker {
 
   /**
    * Auto-digest written on shutdown, in the same structured shape as
-   * orbitnest_sync_memory (`{ v:1, kind:'session_digest', ... }`) so Studio
+   * nestcore_sync_memory (`{ v:1, kind:'session_digest', ... }`) so the console
    * renders it and it doesn't replace a structured digest with prose.
    */
   autoDigest(): string {
@@ -55,7 +55,7 @@ export class SessionTracker {
       v: 1,
       kind: 'session_digest',
       date: new Date().toISOString().slice(0, 10),
-      title: 'Auto-saved session (ended before orbitnest_sync_memory)',
+      title: 'Auto-saved session (ended before nestcore_sync_memory)',
       summary:
         `The MCP session closed with ${this.writes.length} unsynced change(s).` +
         (this.lastDigestAt ? ` Previous digest written at ${this.lastDigestAt}.` : ''),
@@ -67,6 +67,6 @@ export class SessionTracker {
   reminderFooter(): string | null {
     const n = this.pendingCount();
     if (n === 0) return null;
-    return `\n\n---\n[Memory] ${n} change${n === 1 ? '' : 's'} recorded this session. Call orbitnest_sync_memory before closing to persist them.`;
+    return `\n\n---\n[Memory] ${n} change${n === 1 ? '' : 's'} recorded this session. Call nestcore_sync_memory before closing to persist them.`;
   }
 }

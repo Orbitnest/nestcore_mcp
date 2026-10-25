@@ -7,7 +7,7 @@ import { requireProjectId } from '../utils/validators.js';
 export function registerLoggingTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Query Logs ───
-  server.registerTool('orbitnest_query_logs', {
+  server.registerTool('nestcore_query_logs', {
     description: 'Query project logs with filtering by type, level, time range, and text search. Use `has_more` in the response to page with offset.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -49,7 +49,7 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get Slow Queries ───
-  server.registerTool('orbitnest_get_slow_queries', {
+  server.registerTool('nestcore_get_slow_queries', {
     description: 'Get slow database queries (queries taking >1000ms) for performance monitoring.',
     inputSchema: { projectId: z.string().optional(), limit: z.number().optional() },
   }, async ({ projectId, limit }) => {
@@ -66,7 +66,7 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Export Logs ───
-  server.registerTool('orbitnest_export_logs', {
+  server.registerTool('nestcore_export_logs', {
     description: 'Export project logs (newest first, up to 10,000 rows) as JSON or CSV text.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -91,7 +91,7 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get Log Stats ───
-  server.registerTool('orbitnest_get_log_stats', {
+  server.registerTool('nestcore_get_log_stats', {
     description: 'Get log statistics and aggregations for a project.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {

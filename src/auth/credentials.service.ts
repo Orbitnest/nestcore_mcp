@@ -4,25 +4,43 @@ import * as os from 'node:os';
 import { logger } from '../utils/logger.js';
 import type { StoredCredentials } from '../types/session.types.js';
 
-const CREDENTIALS_DIR = path.join(os.homedir(), '.orbitnest');
+const CREDENTIALS_DIR = path.join(os.homedir(), '.nestcore');
 const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, 'credentials.json');
-// Advisory lock shared with the OrbitNest CLI — serialises refresh-token
+// Pre-rename location: read when the new file is absent, and kept in sync while it
+// exists so an older CLI/MCP sharing it never replays a rotated refresh token.
+const LEGACY_CREDENTIALS_FILE = path.join(os.homedir(), '.orbitnest', 'credentials.json');
+// Advisory lock shared with the NestCore CLI — serialises refresh-token
 // rotation across processes (the API revokes every session of the admin when a
 // consumed refresh token is replayed).
 const CREDENTIALS_LOCK = path.join(CREDENTIALS_DIR, 'credentials.lock');
 
 export function loadCredentials(): StoredCredentials | null {
   try {
-    if (!fs.existsSync(CREDENTIALS_FILE)) {
+    const file = [CREDENTIALS_FILE, LEGACY_CREDENTIALS_FILE].find((f) => fs.existsSync(f));
+    if (!file) {
       logger.debug('No credentials file found');
       return null;
     }
-    const raw = fs.readFileSync(CREDENTIALS_FILE, 'utf-8');
+    const raw = fs.readFileSync(file, 'utf-8');
     return JSON.parse(raw) as StoredCredentials;
   } catch (err) {
     logger.warn('Failed to load credentials', { error: String(err) });
     return null;
   }
+}
+
+function writeAtomic(file: string, body: string): void {
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, body, { mode: 0o600 });
+  try {
+    fs.renameSync(tmp, file);
+  } catch {
+    // Windows can refuse the rename while another process has the file open.
+    fs.writeFileSync(file, body, { mode: 0o600 });
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+  }
+  // `mode` only applies on creation — tighten a pre-existing wider file too.
+  try { fs.chmodSync(file, 0o600); } catch { /* no-op on Windows */ }
 }
 
 /**
@@ -34,17 +52,10 @@ export function saveCredentials(credentials: StoredCredentials): void {
   try {
     fs.mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
     const body = JSON.stringify({ ...(loadCredentials() ?? {}), ...credentials }, null, 2);
-    const tmp = `${CREDENTIALS_FILE}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, body, { mode: 0o600 });
-    try {
-      fs.renameSync(tmp, CREDENTIALS_FILE);
-    } catch {
-      // Windows can refuse the rename while another process has the file open.
-      fs.writeFileSync(CREDENTIALS_FILE, body, { mode: 0o600 });
-      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+    writeAtomic(CREDENTIALS_FILE, body);
+    if (fs.existsSync(LEGACY_CREDENTIALS_FILE)) {
+      try { writeAtomic(LEGACY_CREDENTIALS_FILE, body); } catch { /* best-effort */ }
     }
-    // `mode` only applies on creation — tighten a pre-existing wider file too.
-    try { fs.chmodSync(CREDENTIALS_FILE, 0o600); } catch { /* no-op on Windows */ }
     logger.info('Credentials saved');
   } catch (err) {
     logger.error('Failed to save credentials', { error: String(err) });
@@ -80,9 +91,12 @@ export async function withCredentialsLock<T>(fn: () => Promise<T>): Promise<T> {
 
 export function clearCredentials(): void {
   try {
-    if (fs.existsSync(CREDENTIALS_FILE)) {
-      fs.unlinkSync(CREDENTIALS_FILE);
-      logger.info('Credentials cleared');
+    // Clear the pre-rename file too, or it would be read back as a fallback.
+    for (const file of [CREDENTIALS_FILE, LEGACY_CREDENTIALS_FILE]) {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+        logger.info('Credentials cleared', { file });
+      }
     }
   } catch (err) {
     logger.warn('Failed to clear credentials', { error: String(err) });

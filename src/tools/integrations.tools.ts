@@ -13,7 +13,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   const pid = (projectId?: string) => requireProjectId(projectId, ctx.session.getSession().currentProjectId);
 
   // ─── Direct connection string ───
-  server.registerTool('orbitnest_get_connection_string', {
+  server.registerTool('nestcore_get_connection_string', {
     description: 'Get the direct Postgres connection string for a project (only when the deployment has direct connections enabled).',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -26,7 +26,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   // ─── End-user auth security ───
-  server.registerTool('orbitnest_get_auth_security', {
+  server.registerTool('nestcore_get_auth_security', {
     description: "A project's end-user auth limits in force: code length, code expiry, wrong codes allowed, codes per email per hour, and password lockout (attempts, minutes).",
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -38,7 +38,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_set_auth_security', {
+  server.registerTool('nestcore_set_auth_security', {
     description: 'Change end-user auth limits (only the given ones). Applies to every app signing in to the project within 30 seconds. Needs the workspace admin role.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -68,7 +68,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   // ─── AI gateway ───
-  server.registerTool('orbitnest_get_ai_settings', {
+  server.registerTool('nestcore_get_ai_settings', {
     description: 'AI gateway settings of a project: saved provider keys (masked, last 4 characters), default models and monthly spend caps.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -80,7 +80,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_ai_usage', {
+  server.registerTool('nestcore_ai_usage', {
     description: "AI gateway usage of a project with its own keys: calls, errors, tokens and cost for the last N days, per day, per model and top end users.",
     inputSchema: { projectId: z.string().optional(), days: z.number().int().min(1).max(365).optional() },
   }, async ({ projectId, days }) => {
@@ -93,7 +93,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   // ─── AI data: memory, collections, traces, automatic embeddings ───
-  server.registerTool('orbitnest_ai_overview', {
+  server.registerTool('nestcore_ai_overview', {
     description:
       "Counts of a project's AI data: memories, memory subjects, collections, documents, threads, messages, traces in the last 24 hours " +
       'and embedded columns. enabled=false (all zeros) means the project has not used an AI feature yet.',
@@ -107,7 +107,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_list_collections', {
+  server.registerTool('nestcore_list_collections', {
     description: 'Vector collections of a project: name, embedding model, chunk size/overlap, whether users may add their own documents, and document counts (total and still processing).',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -119,7 +119,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_memory_subjects', {
+  server.registerTool('nestcore_memory_subjects', {
     description: 'Subjects that have AI memories in a project (e.g. "user:<id>", "agent:support"), with memory counts and last update, newest first (up to 100).',
     inputSchema: {
       projectId: z.string().optional(),
@@ -134,7 +134,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_list_embeddings', {
+  server.registerTool('nestcore_list_embeddings', {
     description:
       'Automatically embedded columns of a project with progress: source columns, model, rows, embedded (with the current model), ' +
       'pending and failed queue entries, and the last error.',
@@ -148,7 +148,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_ai_traces', {
+  server.registerTool('nestcore_ai_traces', {
     description:
       'Recent AI calls of a project, newest first: kind (chat/embed), caller, model, tokens in/out, cost, latency, status and error. ' +
       'Prompts and replies are never stored (only a hash). Kept 1/7/30 days on Free/Starter/Pro.',
@@ -167,7 +167,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_enable_embeddings', {
+  server.registerTool('nestcore_enable_embeddings', {
     description:
       'Embed a table automatically: adds a vector(768) column (default "<first source>_embedding") plus <target>_embed_model and ' +
       '<target>_embed_hash, a trigger that queues changed rows, and an HNSW index, then backfills existing rows in the background ' +
@@ -197,7 +197,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   // ─── Webhooks ───
-  server.registerTool('orbitnest_list_webhooks', {
+  server.registerTool('nestcore_list_webhooks', {
     description: 'List the database webhooks configured for a project.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -209,7 +209,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_create_webhook', {
+  server.registerTool('nestcore_create_webhook', {
     description: 'Create a database webhook (signed HTTP POST on row INSERT/UPDATE/DELETE). Returns the signing secret once.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -227,7 +227,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_delete_webhook', {
+  server.registerTool('nestcore_delete_webhook', {
     description: 'Delete a database webhook by id.',
     inputSchema: { projectId: z.string().optional(), webhookId: z.string() },
   }, async ({ projectId, webhookId }) => {
@@ -239,7 +239,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_test_webhook', {
+  server.registerTool('nestcore_test_webhook', {
     description: 'Send a sample ping event to a webhook to verify the endpoint.',
     inputSchema: { projectId: z.string().optional(), webhookId: z.string() },
   }, async ({ projectId, webhookId }) => {
@@ -252,7 +252,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   // ─── SMS / Twilio config ───
-  server.registerTool('orbitnest_get_sms_config', {
+  server.registerTool('nestcore_get_sms_config', {
     description: "Get a project's SMS (Twilio) configuration. The auth token is never returned.",
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -264,7 +264,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_set_sms_config', {
+  server.registerTool('nestcore_set_sms_config', {
     description: "Create or update a project's Twilio SMS settings (auth token stored encrypted).",
     inputSchema: {
       projectId: z.string().optional(),
@@ -282,7 +282,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     }
   });
 
-  server.registerTool('orbitnest_test_sms', {
+  server.registerTool('nestcore_test_sms', {
     description: 'Send a test SMS to verify the Twilio configuration.',
     inputSchema: { projectId: z.string().optional(), to: z.string() },
   }, async ({ projectId, to }) => {
@@ -295,7 +295,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   // ─── Enable a Postgres extension (e.g. pgvector) ───
-  server.registerTool('orbitnest_enable_extension', {
+  server.registerTool('nestcore_enable_extension', {
     description: 'Enable a Postgres extension on a project (e.g. "vector" for pgvector semantic search). Allowed: vector, pg_trgm, citext, unaccent, uuid-ossp.',
     inputSchema: { projectId: z.string().optional(), name: z.string() },
   }, async ({ projectId, name }) => {

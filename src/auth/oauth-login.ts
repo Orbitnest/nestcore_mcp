@@ -178,11 +178,11 @@ function escapeHtml(value: string): string {
 function resultPage(kind: 'success' | 'error', message: string): string {
   const color = kind === 'success' ? '#0ea5a4' : '#b91c1c';
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>OrbitNest Studio</title>
+<html lang="en"><head><meta charset="utf-8"><title>NestCore</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;color:#0f172a;">
   <div style="max-width:420px;margin:80px auto;padding:32px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;text-align:center;">
-    <div style="font-size:18px;font-weight:700;color:${color};margin-bottom:10px;">OrbitNest Studio</div>
+    <div style="font-size:18px;font-weight:700;color:${color};margin-bottom:10px;">NestCore</div>
     <p style="font-size:14px;line-height:1.6;color:#334155;margin:0;">${escapeHtml(message)}</p>
   </div>
 </body></html>`;

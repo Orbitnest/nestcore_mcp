@@ -12,6 +12,14 @@ function env(key: string, fallback?: string): string {
   return process.env[key] ?? fallback ?? '';
 }
 
+/**
+ * `NESTCORE_<name>`, falling back to the pre-rename `ORBITNEST_<name>` so
+ * existing MCP client configs keep working.
+ */
+export function brandEnv(name: string): string | undefined {
+  return process.env[`NESTCORE_${name}`] ?? process.env[`ORBITNEST_${name}`];
+}
+
 function envBool(key: string, fallback: boolean): boolean {
   const val = process.env[key];
   if (val === undefined) return fallback;
@@ -28,9 +36,9 @@ function envInt(key: string, fallback: number): number {
 export function loadConfig(): AppConfig {
   return {
     // A trailing slash would produce `//api/...` URLs that 404.
-    apiUrl: env('ORBITNEST_API_URL', 'https://api.orbitnest.io').replace(/\/+$/, ''),
-    apiBasePath: env('ORBITNEST_API_BASE_PATH', '/api'),
-    serverName: env('MCP_SERVER_NAME', 'orbitnest-studio'),
+    apiUrl: (brandEnv('API_URL') ?? 'https://api.nestcore.io').replace(/\/+$/, ''),
+    apiBasePath: brandEnv('API_BASE_PATH') ?? '/api',
+    serverName: env('MCP_SERVER_NAME', 'nestcore'),
     serverVersion: version,
     logLevel: env('LOG_LEVEL', 'info'),
     defaultProjectId: env('DEFAULT_PROJECT_ID') || null,

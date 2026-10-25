@@ -5,7 +5,7 @@ import { formatErrorResponse } from '../utils/errors.js';
 export function registerDashboardTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Get Dashboard Stats ───
-  server.registerTool('orbitnest_get_dashboard_stats', {
+  server.registerTool('nestcore_get_dashboard_stats', {
     description: 'Get overall dashboard statistics including total projects, users, functions, and storage usage.',
     inputSchema: {},
   }, async () => {
@@ -21,7 +21,7 @@ export function registerDashboardTools(server: McpServer, ctx: ToolContext): voi
   });
 
   // ─── Get Activity ───
-  server.registerTool('orbitnest_get_activity', {
+  server.registerTool('nestcore_get_activity', {
     description: 'Get recent activity log from the dashboard.',
     inputSchema: {},
   }, async () => {

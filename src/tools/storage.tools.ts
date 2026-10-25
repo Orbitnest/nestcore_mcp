@@ -9,7 +9,7 @@ const MAX_DOWNLOAD_BYTES = 1024 * 1024;
 export function registerStorageTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── List Buckets ───
-  server.registerTool('orbitnest_list_buckets', {
+  server.registerTool('nestcore_list_buckets', {
     description: 'List all storage buckets for a project. Note: uses project slug, not ID.',
     inputSchema: { projectSlug: z.string().optional() },
   }, async ({ projectSlug }) => {
@@ -26,7 +26,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Create Bucket ───
-  server.registerTool('orbitnest_create_bucket', {
+  server.registerTool('nestcore_create_bucket', {
     description: 'Create a storage bucket. public=true makes its files readable without a user token; if omitted, a new bucket is private and an existing one keeps its visibility.',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -47,7 +47,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Delete Bucket ───
-  server.registerTool('orbitnest_delete_bucket', {
+  server.registerTool('nestcore_delete_bucket', {
     description: 'Delete a storage bucket. Bucket must be empty. Requires confirmation.',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -75,7 +75,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── List Files ───
-  server.registerTool('orbitnest_list_files', {
+  server.registerTool('nestcore_list_files', {
     description: 'List files in a storage bucket with optional prefix filtering.',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -97,7 +97,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Upload File ───
-  server.registerTool('orbitnest_upload_file', {
+  server.registerTool('nestcore_upload_file', {
     description: 'Upload a file to a storage bucket. File content is provided as a string (base64 for binary).',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -123,7 +123,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Download File ───
-  server.registerTool('orbitnest_download_file', {
+  server.registerTool('nestcore_download_file', {
     description: 'Download a file from a storage bucket. Text files (text/*, JSON, XML, CSV, JS, SVG) come back as text; anything else as base64. Files over 1 MB return only their metadata.',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -153,7 +153,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Delete Files ───
-  server.registerTool('orbitnest_delete_files', {
+  server.registerTool('nestcore_delete_files', {
     description: 'Delete one or more files from a storage bucket. Requires confirmation.',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -182,7 +182,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get Public URL ───
-  server.registerTool('orbitnest_get_public_url', {
+  server.registerTool('nestcore_get_public_url', {
     description: 'Get the public URL for a file in a public bucket.',
     inputSchema: {
       projectSlug: z.string().optional(),
@@ -203,7 +203,7 @@ export function registerStorageTools(server: McpServer, ctx: ToolContext): void 
   });
 
   // ─── Get Bucket Size ───
-  server.registerTool('orbitnest_get_bucket_size', {
+  server.registerTool('nestcore_get_bucket_size', {
     description: 'Get the total size of a storage bucket.',
     inputSchema: {
       projectSlug: z.string().optional(),

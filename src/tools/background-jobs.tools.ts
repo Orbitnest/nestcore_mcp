@@ -32,7 +32,7 @@ function parseTimeoutToMs(label: string): number {
 export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Create Job ───
-  server.registerTool('orbitnest_create_job', {
+  server.registerTool('nestcore_create_job', {
     description: 'Create a background job that runs on a cron schedule. Write the same handler as edge functions.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -65,7 +65,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   });
 
   // ─── List Jobs ───
-  server.registerTool('orbitnest_list_jobs', {
+  server.registerTool('nestcore_list_jobs', {
     description: 'List all background jobs for a project.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
@@ -82,7 +82,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   });
 
   // ─── Get Job ───
-  server.registerTool('orbitnest_get_job', {
+  server.registerTool('nestcore_get_job', {
     description: 'Get details of a specific background job including its source code and schedule.',
     inputSchema: { projectId: z.string().optional(), jobName: z.string() },
   }, async ({ projectId, jobName }) => {
@@ -99,7 +99,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   });
 
   // ─── Update Job ───
-  server.registerTool('orbitnest_update_job', {
+  server.registerTool('nestcore_update_job', {
     description: 'Update a background job\'s source code, schedule, description, or timeout.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -133,7 +133,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   });
 
   // ─── Delete Job ───
-  server.registerTool('orbitnest_delete_job', {
+  server.registerTool('nestcore_delete_job', {
     description: 'Delete a background job. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -161,7 +161,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   });
 
   // ─── Trigger Job ───
-  server.registerTool('orbitnest_trigger_job', {
+  server.registerTool('nestcore_trigger_job', {
     description: 'Manually trigger a background job to run immediately.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -181,7 +181,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   });
 
   // ─── Get Job Runs ───
-  server.registerTool('orbitnest_get_job_runs', {
+  server.registerTool('nestcore_get_job_runs', {
     description: 'Retrieve execution history (runs) for a specific background job.',
     inputSchema: {
       projectId: z.string().optional(),

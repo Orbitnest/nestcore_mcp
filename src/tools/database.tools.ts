@@ -9,7 +9,7 @@ import { guardTableOperation, guardBulkOperation } from '../safety/operation.gua
 export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Get Schema ───
-  server.registerTool('orbitnest_get_schema', {
+  server.registerTool('nestcore_get_schema', {
     description: 'Fetch the database schema for a project: tables, columns (type, nullability, default, key constraint) and whether RLS is enabled. Results are cached for 5 minutes.',
     inputSchema: { projectId: z.string().optional(), forceRefresh: z.boolean().optional() },
   }, async ({ projectId, forceRefresh }) => {
@@ -36,7 +36,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Execute SQL ───
-  server.registerTool('orbitnest_execute_sql', {
+  server.registerTool('nestcore_execute_sql', {
     description: 'Execute a raw SQL query against the project database. Safety guards validate queries to prevent SQL injection, auth table modifications, and unconfirmed destructive operations.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -71,7 +71,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Create Table ───
-  server.registerTool('orbitnest_create_table', {
+  server.registerTool('nestcore_create_table', {
     description: 'Create a new database table from a structured definition. Generates and executes the CREATE TABLE SQL statement.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -125,7 +125,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Get Table Data ───
-  server.registerTool('orbitnest_get_table_data', {
+  server.registerTool('nestcore_get_table_data', {
     description: 'Retrieve rows from a table with ordering and pagination (max 100 rows per call; offset should be a multiple of limit).',
     inputSchema: {
       projectId: z.string().optional(),
@@ -148,7 +148,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Insert Row ───
-  server.registerTool('orbitnest_insert_row', {
+  server.registerTool('nestcore_insert_row', {
     description: 'Insert a new row into a database table.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -170,7 +170,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Update Row ───
-  server.registerTool('orbitnest_update_row', {
+  server.registerTool('nestcore_update_row', {
     description: 'Update an existing row in a table by its ID.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -193,7 +193,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Delete Row ───
-  server.registerTool('orbitnest_delete_row', {
+  server.registerTool('nestcore_delete_row', {
     description: 'Delete a single row from a table by its ID. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -223,7 +223,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Bulk Insert ───
-  server.registerTool('orbitnest_bulk_insert', {
+  server.registerTool('nestcore_bulk_insert', {
     description: 'Insert multiple rows into a table in a single transaction.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -247,7 +247,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   // ─── Bulk Update ───
   // Each update is { where, data } — the API matches rows by `where` and
   // applies `data`. (A flat array of rows can't express which rows to update.)
-  server.registerTool('orbitnest_bulk_update', {
+  server.registerTool('nestcore_bulk_update', {
     description: 'Update multiple rows in a table. Each update is { where, data }: rows matching `where` get `data` applied.',
     inputSchema: {
       projectId: z.string().optional(),
@@ -274,7 +274,7 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   // ─── Bulk Delete ───
   // Deletes by `conditions` (each is a column=value match, ANDed). For a simple
   // id list, pass conditions like [{ id: "..." }, { id: "..." }].
-  server.registerTool('orbitnest_bulk_delete', {
+  server.registerTool('nestcore_bulk_delete', {
     description: 'Delete multiple rows from a table by match conditions. Each condition is a column=value object (e.g. { id: "..." }). Requires confirmation for large operations.',
     inputSchema: {
       projectId: z.string().optional(),

@@ -1,9 +1,10 @@
 {
-  "name": "@orbitneststudio/mcp-server",
-  "version": "1.5.0",
-  "description": "Model Context Protocol server for OrbitNest Studio",
+  "name": "@nestcore/mcp-server",
+  "version": "1.6.0",
+  "description": "Model Context Protocol server for NestCore",
   "main": "dist/index.js",
   "bin": {
+    "nestcore-mcp": "dist/index.js",
     "orbitnest-mcp": "dist/index.js"
   },
   "type": "module",
@@ -12,7 +13,7 @@
     "prepare": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "npm run build && node test/resource-size.mjs"
+    "test": "npm run build && node test/resource-size.mjs && node test/legacy-tool-names.mjs"
   },
   "files": [
     "dist/",
@@ -30,7 +31,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Orbitnest/orbitnest_mcp.git"
+    "url": "git+https://github.com/Orbitnest/nestcore_mcp.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -44,10 +45,10 @@
   },
   "keywords": [
     "mcp",
-    "orbitnest",
+    "nestcore",
     "model-context-protocol",
     "ai"
   ],
-  "author": "OrbitNest Team",
+  "author": "NestCore Team",
   "license": "MIT"
 }

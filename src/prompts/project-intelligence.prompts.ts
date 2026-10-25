@@ -6,7 +6,7 @@ import { formatErrorResponse } from '../utils/errors.js';
 
 export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolContext): void {
 
-  server.registerPrompt('orbitnest_load_project', {
+  server.registerPrompt('nestcore_load_project', {
     description:
       'Load the project intelligence context (lean AI view) and orient yourself for the session. ' +
       'Run this at the start of every work session before calling any other tool.',
@@ -53,7 +53,7 @@ export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolC
         '',
         '---',
         'You are now oriented. Proceed with the session keeping these constraints, decisions, and tasks in mind.',
-        'At the end of the session, call orbitnest_sync_memory with a structured digest plus any unsaved decisions, tasks and events.',
+        'At the end of the session, call nestcore_sync_memory with a structured digest plus any unsaved decisions, tasks and events.',
       ].join('\n');
       return {
         messages: [{ role: 'user' as const, content: { type: 'text' as const, text } }],

@@ -1,6 +1,6 @@
 /**
  * Migration engine types — self-contained so the MCP server has no runtime
- * dependency on the Node SDK. Mirrors `@orbitneststudio/node`'s migration types.
+ * dependency on the Node SDK. Mirrors `@nestcore/node`'s migration types.
  */
 
 export type MigrationStatus = 'success' | 'failed';

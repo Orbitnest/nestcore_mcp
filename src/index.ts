@@ -3,15 +3,15 @@ import { loadConfig } from './config.js';
 import { setLogLevel, logger } from './utils/logger.js';
 import { createServer, startStdioServer } from './server.js';
 import type { SessionTracker } from './context/session-tracker.js';
-import type { OrbitNestClient } from './sdk/orbitnest.client.js';
+import type { NestCoreClient } from './sdk/nestcore.client.js';
 
 let _tracker: SessionTracker | null = null;
-let _client: OrbitNestClient | null = null;
+let _client: NestCoreClient | null = null;
 
 // ── Graceful shutdown: auto-write session digest when the session ends ──────
 // MCP hosts usually end a stdio server by closing its stdin (SIGTERM is never
 // delivered on Windows). If the AI wrote decisions/tasks/events but never
-// called orbitnest_sync_memory, write an auto-generated digest so nothing is
+// called nestcore_sync_memory, write an auto-generated digest so nothing is
 // silently lost.
 let _exiting = false;
 async function autoSyncOnExit(reason: string) {
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     const config = loadConfig();
     setLogLevel(config.logLevel);
 
-    logger.info('Starting OrbitNest MCP Server...', {
+    logger.info('Starting NestCore MCP Server...', {
       version: config.serverVersion,
       apiUrl: config.apiUrl,
     });

@@ -3,7 +3,10 @@ import * as path from 'node:path';
 import type { WorkspaceConfig } from '../types/session.types.js';
 import { logger } from '../utils/logger.js';
 
-const CONFIG_DIR = '.orbitnest';
+const CONFIG_DIR = '.nestcore';
+// Written by the CLI before the OrbitNest → NestCore rename; read when a
+// directory has no `.nestcore/config.json`.
+const LEGACY_CONFIG_DIR = '.orbitnest';
 const CONFIG_FILE = 'config.json';
 
 export class WorkspaceService {
@@ -15,8 +18,10 @@ export class WorkspaceService {
     let current = start;
 
     while (true) {
-      const configPath = path.join(current, CONFIG_DIR, CONFIG_FILE);
-      if (fs.existsSync(configPath)) {
+      const configPath = [CONFIG_DIR, LEGACY_CONFIG_DIR]
+        .map((dir) => path.join(current, dir, CONFIG_FILE))
+        .find((p) => fs.existsSync(p));
+      if (configPath) {
         try {
           const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
           if (raw?.projectId) {
@@ -47,7 +52,7 @@ export class WorkspaceService {
   /**
    * Persist the active project into the workspace file the CLI linked (found by
    * detectWorkspace). Without one, nothing is written: the MCP's cwd is often
-   * `/` or System32 under desktop hosts, and a stray `.orbitnest/` there would
+   * `/` or System32 under desktop hosts, and a stray `.nestcore/` there would
    * shadow configs or fail with EACCES. Returns the path written, or null.
    */
   saveWorkspaceConfig(config: WorkspaceConfig): string | null {
@@ -55,6 +60,12 @@ export class WorkspaceService {
     try {
       const { slug: _legacy, ...existing } = (this.config ?? {}) as WorkspaceConfig & { slug?: string };
       const merged: WorkspaceConfig = { ...existing, ...config };
+      // A pre-rename `.orbitnest/config.json` is migrated: write the new file next to it.
+      if (path.basename(path.dirname(this.configPath)) === LEGACY_CONFIG_DIR) {
+        const target = path.join(path.dirname(path.dirname(this.configPath)), CONFIG_DIR, CONFIG_FILE);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        this.configPath = target;
+      }
       fs.writeFileSync(this.configPath, JSON.stringify(merged, null, 2));
       this.config = merged;
       logger.info('Workspace config saved', { path: this.configPath });

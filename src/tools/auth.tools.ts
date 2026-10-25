@@ -8,9 +8,9 @@ import { loginWithOAuth } from '../auth/oauth-login.js';
 export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Admin Sign In ───
-  server.registerTool('orbitnest_admin_signin', {
+  server.registerTool('nestcore_admin_signin', {
     description:
-      'Sign in as an OrbitNest admin user. Returns JWT tokens and saves credentials for subsequent requests. ' +
+      'Sign in as an NestCore admin user. Returns JWT tokens and saves credentials for subsequent requests. ' +
       'If the account has two-factor (TOTP) enabled, call again with the same email/password plus `mfa_code` ' +
       'set to a 6-digit authenticator code (or a recovery code).',
     inputSchema: {
@@ -27,7 +27,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
           content: [{ type: 'text' as const, text: JSON.stringify({
             success: false,
             mfa_required: true,
-            message: 'This account has two-factor authentication enabled. Call orbitnest_admin_signin again with the same email and password, plus mfa_code set to your 6-digit authenticator code (or a recovery code).',
+            message: 'This account has two-factor authentication enabled. Call nestcore_admin_signin again with the same email and password, plus mfa_code set to your 6-digit authenticator code (or a recovery code).',
           }, null, 2) }],
         };
       }
@@ -47,9 +47,9 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   // For admins who signed up with a provider and have no password. Opens the
   // browser to the existing OAuth flow and captures tokens via a one-time
   // localhost loopback server. See ../auth/oauth-login.ts.
-  server.registerTool('orbitnest_login', {
+  server.registerTool('nestcore_login', {
     description:
-      'Sign in as an OrbitNest admin using Google, GitHub, or Apple. Opens your browser to complete sign-in, then captures the session automatically. Use this if you signed up with a social provider (no password). For password accounts use orbitnest_admin_signin.',
+      'Sign in as an NestCore admin using Google, GitHub, or Apple. Opens your browser to complete sign-in, then captures the session automatically. Use this if you signed up with a social provider (no password). For password accounts use nestcore_admin_signin.',
     inputSchema: { provider: z.enum(['google', 'github', 'apple']).default('google') },
   }, async ({ provider }) => {
     try {
@@ -69,8 +69,8 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Admin Sign Up (direct) ───
-  server.registerTool('orbitnest_admin_signup', {
-    description: 'Create a new OrbitNest admin account directly. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
+  server.registerTool('nestcore_admin_signup', {
+    description: 'Create a new NestCore admin account directly. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
     inputSchema: { email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1).max(100) },
   }, async ({ email, password, fullName }) => {
     try {
@@ -94,8 +94,8 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Admin Sign Up (with verification) ───
-  server.registerTool('orbitnest_admin_signup_verified', {
-    description: 'Complete admin signup with the 4-digit email verification code. First call orbitnest_request_verification (same email, password and fullName) to get the code.',
+  server.registerTool('nestcore_admin_signup_verified', {
+    description: 'Complete admin signup with the 4-digit email verification code. First call nestcore_request_verification (same email, password and fullName) to get the code.',
     inputSchema: {
       email: z.string().email(),
       password: z.string().min(8),
@@ -106,7 +106,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
     try {
       const result = await ctx.apiClient.signupWithVerification(email, password, fullName, verificationCode);
       ctx.session.setAuthFromSignin(result);
-      // HIGH-03: strip tokens from the tool output (see orbitnest_admin_signup).
+      // HIGH-03: strip tokens from the tool output (see nestcore_admin_signup).
       const { email: sessionEmail } = ctx.session.getSession();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
@@ -121,7 +121,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Request Verification Code ───
-  server.registerTool('orbitnest_request_verification', {
+  server.registerTool('nestcore_request_verification', {
     description: 'Request an email verification code for admin signup. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
     inputSchema: { email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1).max(100) },
   }, async ({ email, password, fullName }) => {
@@ -140,7 +140,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Refresh Token ───
-  server.registerTool('orbitnest_refresh_token', {
+  server.registerTool('nestcore_refresh_token', {
     description: 'Refresh expired JWT access token using stored refresh token.',
     inputSchema: {},
   }, async () => {
@@ -158,7 +158,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Sign Out ───
-  server.registerTool('orbitnest_admin_signout', {
+  server.registerTool('nestcore_admin_signout', {
     description: 'Sign out the current admin user and clear stored credentials.',
     inputSchema: {},
   }, async () => {
@@ -188,7 +188,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Get Profile ───
-  server.registerTool('orbitnest_get_profile', {
+  server.registerTool('nestcore_get_profile', {
     description: 'Get the current admin user profile.',
     inputSchema: {},
   }, async () => {
