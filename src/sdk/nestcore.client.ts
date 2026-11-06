@@ -163,6 +163,15 @@ export class NestCoreClient {
       text += '. This is an Agent project (one PC running NestCore Agent); it only holds the agent schema, agent-* buckets and the agent functions. Use an App project for app data.';
     } else if (code === 'PROJECT_PAUSED') {
       text += '. The project is paused (plan limit or owner): reads work in Studio, everything else waits until it is resumed or the plan is upgraded.';
+    } else if (code === 'CREDITS_EXHAUSTED') {
+      text += body.reason === 'spend_cap'
+        ? ". The workspace's monthly AI credit cap is reached: raise or clear it (nestcore_set_credit_cap), add the project's own provider key, or wait for next month."
+        : '. The workspace has no AI credit left: buy a pack (nestcore_buy_credits gives a checkout link for a human to pay) or add the project\'s own provider key.';
+      if (typeof body.buyUrl === 'string') text += ` Buy credit: ${body.buyUrl}`;
+      text += ' Do not retry the call until one of these is done.';
+    } else if (code === 'QUOTA_EXCEEDED' && (body.reason === 'ai_collections' || body.quota === 'ai_collections')) {
+      text += '. The project has as many AI collections as its plan allows (Free 3, Starter 20, Pro 100): delete one or upgrade the plan.';
+      if (typeof body.upgradeUrl === 'string') text += ` Upgrade: ${body.upgradeUrl}`;
     }
     // Keep the API's own code and structured fields (e.g. QUOTA_EXCEEDED's kind/reason/upgradeUrl).
     throw new ApiError(text, response.status, code, body);
@@ -336,6 +345,25 @@ export class NestCoreClient {
   /** Pause a project, or resume it (resuming is checked against the plan). */
   async setProjectStatus(projectId: string, status: 'active' | 'paused') {
     return this.request<Record<string, unknown>>('POST', EP.PROJECTS.STATUS(projectId), { status });
+  }
+
+  // ─── Workspace AI credit ───
+
+  /** Balance, monthly cap, this month's spend, availability, packs, margin and the recent ledger. */
+  async getCredits() {
+    return this.request<Record<string, unknown>>('GET', EP.BILLING.CREDITS);
+  }
+
+  /** A Stripe Checkout URL (one-time payment) for a credit pack; nothing is charged until a human pays it. */
+  async createCreditCheckout(pack: string, ref?: string) {
+    return this.request<{ url: string; pack: Record<string, unknown>; ref: string | null }>(
+      'POST', EP.BILLING.CREDITS_CHECKOUT, ref ? { pack, ref } : { pack },
+    );
+  }
+
+  /** Set the workspace's monthly cap on credit spend (USD), or clear it with null. Returns the new summary. */
+  async setCreditCap(monthlyCapUsd: number | null) {
+    return this.request<Record<string, unknown>>('PUT', EP.BILLING.CREDITS_CAP, { monthlyCapUsd });
   }
 
   async getProject(projectId: string) {

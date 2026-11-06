@@ -13,7 +13,7 @@
     "prepare": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "npm run build && node test/resource-size.mjs && node test/legacy-tool-names.mjs"
+    "test": "npm run build && node test/resource-size.mjs && node test/legacy-tool-names.mjs && node test/credits.mjs"
   },
   "files": [
     "dist/",

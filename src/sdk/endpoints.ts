@@ -194,6 +194,13 @@ export const DASHBOARD = {
   ACTIVITY: '/dashboard/activity',
 } as const;
 
+// Workspace AI credit (admin JWT; checkout and cap need the workspace admin role)
+export const BILLING = {
+  CREDITS: '/billing/credits',
+  CREDITS_CHECKOUT: '/billing/credits/checkout',
+  CREDITS_CAP: '/billing/credits/cap',
+} as const;
+
 // Realtime (admin-scoped; uses JWT auth + project UUID)
 export const REALTIME = {
   TABLES: (id: string) => `/admin/projects/${e(id)}/realtime/tables`,

@@ -34,12 +34,15 @@ export class SafetyError extends McpError {
 
 export class ApiError extends McpError {
   public readonly statusCode: number;
-  /** The API's error body (QUOTA_EXCEEDED carries quota/plan/limit/usage/kind/reason/upgradeUrl). */
+  /**
+   * The API's error body (QUOTA_EXCEEDED carries quota/plan/limit/usage/kind/reason/upgradeUrl;
+   * CREDITS_EXHAUSTED carries reason/balanceUsd/monthlyCapUsd/spentThisMonthUsd/buyUrl).
+   */
   public readonly details?: Record<string, unknown>;
 
   /**
    * `apiCode` is the platform's own code when it sent one, e.g. QUOTA_EXCEEDED,
-   * AGENT_PROJECT_RESTRICTED, NOT_AN_AGENT_PROJECT or PROJECT_PAUSED.
+   * CREDITS_EXHAUSTED, AGENT_PROJECT_RESTRICTED, NOT_AN_AGENT_PROJECT or PROJECT_PAUSED.
    */
   constructor(message: string, statusCode: number, apiCode?: string, details?: Record<string, unknown>) {
     super(message, apiCode ?? 'API_ERROR');
@@ -50,7 +53,10 @@ export class ApiError extends McpError {
 }
 
 /** Fields of an API error body worth handing to the model (never the raw body). */
-const API_DETAIL_FIELDS = ['quota', 'plan', 'limit', 'usage', 'kind', 'reason', 'upgradeUrl', 'status'] as const;
+const API_DETAIL_FIELDS = [
+  'quota', 'plan', 'limit', 'usage', 'kind', 'reason', 'upgradeUrl', 'status',
+  'balanceUsd', 'monthlyCapUsd', 'spentThisMonthUsd', 'buyUrl',
+] as const;
 
 export class ProjectContextError extends McpError {
   constructor(message: string = 'No active project. Use nestcore_set_active_project first or provide projectId.') {
