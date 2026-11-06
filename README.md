@@ -363,6 +363,15 @@ cached tool list keep working.
 | `nestcore_ai_traces` | Recent AI calls: model, tokens, cost, latency, status (never prompt text) |
 | `nestcore_enable_embeddings` | Embed a table's text columns into a `vector(768)` column kept up to date (admin; requires `confirmEnable: true`) |
 
+### AI credits (3 tools)
+Prepaid AI credit is per workspace and pays for AI calls of projects without their own provider key (a project's own key always wins). Calls paid from credit fail with `CREDITS_EXHAUSTED` (`reason`: `balance` or `spend_cap`, plus `buyUrl`) when the balance is gone or the monthly cap is reached.
+
+| Tool | Description |
+|------|-------------|
+| `nestcore_get_credits` | Balance, monthly cap, this month's spend, availability, credit packs and the recent ledger |
+| `nestcore_set_credit_cap` | Set the monthly cap in USD, or `null` to remove it (admin) |
+| `nestcore_buy_credits` | Stripe Checkout link for a credit pack, for a person to open and pay (admin; adds no credit by itself) |
+
 ### Dashboard (2 tools)
 | Tool | Description |
 |------|-------------|
