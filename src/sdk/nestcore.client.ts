@@ -157,7 +157,15 @@ export class NestCoreClient {
         'are limited to the user who created the project. Browsing and row edits work for every workspace member; ' +
         'ask the project owner to run this operation.';
     }
-    throw new ApiError(text, response.status);
+    const body = errorBody as Record<string, unknown>;
+    const code = typeof body.code === 'string' ? body.code : undefined;
+    if (code === 'AGENT_PROJECT_RESTRICTED') {
+      text += '. This is an Agent project (one PC running NestCore Agent); it only holds the agent schema, agent-* buckets and the agent functions. Use an App project for app data.';
+    } else if (code === 'PROJECT_PAUSED') {
+      text += '. The project is paused (plan limit or owner): reads work in Studio, everything else waits until it is resumed or the plan is upgraded.';
+    }
+    // Keep the API's own code and structured fields (e.g. QUOTA_EXCEEDED's kind/reason/upgradeUrl).
+    throw new ApiError(text, response.status, code, body);
   }
 
   /**
@@ -307,12 +315,27 @@ export class NestCoreClient {
 
   // ─── Projects ───
 
-  async createProject(data: { name: string; description?: string }) {
+  async createProject(data: {
+    name: string;
+    description?: string;
+    kind?: 'app' | 'agent';
+    agent?: { deviceName: string; os: string; agentVersion?: string; createdByClient?: string };
+  }) {
     return this.request<Record<string, unknown>>('POST', EP.PROJECTS.CREATE, data);
   }
 
-  async listProjects() {
-    return this.request<unknown[]>('GET', EP.PROJECTS.LIST);
+  async listProjects(kind?: 'app' | 'agent') {
+    return this.request<unknown[]>('GET', EP.PROJECTS.LIST, undefined, kind ? { query: { kind } } : undefined);
+  }
+
+  /** Can this workspace create one more project of a kind? Carries the upgrade link when not. */
+  async getProjectEligibility(kind: 'app' | 'agent' = 'app') {
+    return this.request<Record<string, unknown>>('GET', EP.PROJECTS.ELIGIBILITY, undefined, { query: { kind } });
+  }
+
+  /** Pause a project, or resume it (resuming is checked against the plan). */
+  async setProjectStatus(projectId: string, status: 'active' | 'paused') {
+    return this.request<Record<string, unknown>>('POST', EP.PROJECTS.STATUS(projectId), { status });
   }
 
   async getProject(projectId: string) {

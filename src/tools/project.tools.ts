@@ -1,19 +1,53 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolContext } from './index.js';
-import { formatErrorResponse } from '../utils/errors.js';
+import { formatErrorResponse, ValidationError } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
 
 export function registerProjectTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Create Project ───
   server.registerTool('nestcore_create_project', {
-    description: 'Create a new NestCore project with a dedicated database. Returns project details including API keys.',
-    inputSchema: { name: z.string().min(3).max(120), description: z.string().max(500).optional() },
-  }, async ({ name, description }) => {
+    description:
+      'Create a new NestCore project with a dedicated database. Returns project details including API keys. ' +
+      'kind "app" (default) is a backend for an app; kind "agent" is the private backend of ONE PC running NestCore Agent ' +
+      '(needs agent.deviceName and agent.os) and only ever holds the agent schema, agent-* buckets and the agent functions. ' +
+      'The kind cannot be changed later. Check nestcore_get_project_eligibility first: on the free plan the one project is an app OR an agent.',
+    inputSchema: {
+      name: z.string().min(3).max(120),
+      description: z.string().max(500).optional(),
+      kind: z.enum(['app', 'agent']).optional(),
+      agent: z.object({
+        deviceName: z.string().min(1).max(80),
+        os: z.string().min(1).max(40),
+        agentVersion: z.string().max(32).optional(),
+      }).optional(),
+    },
+  }, async ({ name, description, kind, agent }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      const result = await ctx.apiClient.createProject({ name, description });
+      if (kind === 'agent' && !agent) {
+        throw new ValidationError('An agent project needs agent: { deviceName, os } (the PC it belongs to).');
+      }
+      const result = await ctx.apiClient.createProject({ name, description, kind, ...(kind === 'agent' && agent ? { agent } : {}) });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Project Eligibility ───
+  server.registerTool('nestcore_get_project_eligibility', {
+    description:
+      'Can this workspace create one more project of a kind ("app" or "agent")? Returns { allowed, plan, used, limit, reason?, upgradeUrl }. ' +
+      'When allowed is false, give the user the upgradeUrl instead of trying to create the project.',
+    inputSchema: { kind: z.enum(['app', 'agent']).optional() },
+  }, async ({ kind }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const result = await ctx.apiClient.getProjectEligibility(kind ?? 'app');
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
@@ -24,12 +58,33 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
 
   // ─── List Projects ───
   server.registerTool('nestcore_list_projects', {
-    description: 'List all projects for the authenticated admin user.',
-    inputSchema: {},
-  }, async () => {
+    description:
+      'List all projects for the authenticated admin user. Each project has kind ("app" | "agent") and status ' +
+      '("active" | "paused" | "compromised"; paused projects reject writes and data-plane calls with 423 PROJECT_PAUSED). Optionally filter by kind.',
+    inputSchema: { kind: z.enum(['app', 'agent']).optional() },
+  }, async ({ kind }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      const result = await ctx.apiClient.listProjects();
+      const result = await ctx.apiClient.listProjects(kind);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Pause / Resume Project ───
+  server.registerTool('nestcore_set_project_status', {
+    description:
+      'Pause a project (API, realtime and relay go off; nothing is deleted) or resume it. Resuming counts against the plan\'s project limit ' +
+      'and returns QUOTA_EXCEEDED with an upgradeUrl when the plan is full. A "compromised" project (kill switch) cannot be resumed here.',
+    inputSchema: { projectId: z.string().optional(), status: z.enum(['active', 'paused']) },
+  }, async ({ projectId, status }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
+      const result = await ctx.apiClient.setProjectStatus(id, status);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };

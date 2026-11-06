@@ -34,13 +34,23 @@ export class SafetyError extends McpError {
 
 export class ApiError extends McpError {
   public readonly statusCode: number;
+  /** The API's error body (QUOTA_EXCEEDED carries quota/plan/limit/usage/kind/reason/upgradeUrl). */
+  public readonly details?: Record<string, unknown>;
 
-  constructor(message: string, statusCode: number) {
-    super(message, 'API_ERROR');
+  /**
+   * `apiCode` is the platform's own code when it sent one, e.g. QUOTA_EXCEEDED,
+   * AGENT_PROJECT_RESTRICTED, NOT_AN_AGENT_PROJECT or PROJECT_PAUSED.
+   */
+  constructor(message: string, statusCode: number, apiCode?: string, details?: Record<string, unknown>) {
+    super(message, apiCode ?? 'API_ERROR');
     this.name = 'ApiError';
     this.statusCode = statusCode;
+    this.details = details;
   }
 }
+
+/** Fields of an API error body worth handing to the model (never the raw body). */
+const API_DETAIL_FIELDS = ['quota', 'plan', 'limit', 'usage', 'kind', 'reason', 'upgradeUrl', 'status'] as const;
 
 export class ProjectContextError extends McpError {
   constructor(message: string = 'No active project. Use nestcore_set_active_project first or provide projectId.') {
@@ -58,6 +68,22 @@ export function formatErrorResponse(error: unknown): { content: Array<{ type: 't
           error: error.message,
           code: error.code,
           details: error.details,
+        }, null, 2),
+      }],
+    };
+  }
+
+  if (error instanceof ApiError) {
+    const details: Record<string, unknown> = {};
+    for (const k of API_DETAIL_FIELDS) if (error.details?.[k] !== undefined) details[k] = error.details[k];
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: error.message,
+          code: error.code,
+          statusCode: error.statusCode,
+          ...(Object.keys(details).length ? { details } : {}),
         }, null, 2),
       }],
     };

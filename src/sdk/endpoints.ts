@@ -89,6 +89,8 @@ export const ADMIN_INTEGRATIONS = {
 export const PROJECTS = {
   CREATE: '/projects',
   LIST: '/projects',
+  ELIGIBILITY: '/projects/eligibility',
+  STATUS: (id: string) => `/projects/${e(id)}/status`,
   GET: (id: string) => `/projects/${e(id)}`,
   UPDATE: (id: string) => `/projects/${e(id)}`,
   DELETE: (id: string) => `/projects/${e(id)}`,
