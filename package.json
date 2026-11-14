@@ -1,6 +1,6 @@
 {
   "name": "@nestcorehq/mcp-server",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Model Context Protocol server for NestCore",
   "main": "dist/index.js",
   "bin": {
@@ -13,7 +13,7 @@
     "prepare": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "npm run build && node test/resource-size.mjs && node test/legacy-tool-names.mjs && node test/credits.mjs"
+    "test": "npm run build && node test/resource-size.mjs && node test/legacy-tool-names.mjs && node test/credits.mjs && node test/branches.mjs"
   },
   "files": [
     "dist/",

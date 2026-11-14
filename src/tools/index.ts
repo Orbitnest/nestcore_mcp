@@ -33,6 +33,7 @@ import { registerBackgroundJobsTools } from './background-jobs.tools.js';
 import { registerRealtimeTools } from './realtime.tools.js';
 import { registerAnalyticsTools } from './analytics.tools.js';
 import { registerMigrationTools } from './migration.tools.js';
+import { registerBranchTools } from './branches.tools.js';
 import { registerProjectIntelligenceTools } from './project-intelligence.tools.js';
 import { registerProjectIntelligencePrompts } from '../prompts/project-intelligence.prompts.js';
 
@@ -53,6 +54,7 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerRealtimeTools(server, ctx);
   registerAnalyticsTools(server, ctx);
   registerMigrationTools(server, ctx);
+  registerBranchTools(server, ctx);
   registerProjectIntelligenceTools(server, ctx);
   registerProjectIntelligencePrompts(server, ctx);
 }

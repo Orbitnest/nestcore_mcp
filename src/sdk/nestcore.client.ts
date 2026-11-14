@@ -370,6 +370,16 @@ export class NestCoreClient {
     return this.request<Record<string, unknown>>('GET', EP.PROJECTS.GET(projectId));
   }
 
+  /**
+   * Project branches (Production + Development). `projectId` may be the
+   * Production project or any of its branches; `sub` is appended to
+   * `/projects/:id/branches` (e.g. `/development/promote`).
+   */
+  async branches<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'DELETE', projectId: string, sub = '', body?: unknown): Promise<T> {
+    const res = await this.request<{ data?: T } & Record<string, unknown>>(method, `/projects/${encodeURIComponent(projectId)}/branches${sub}`, body);
+    return (res && 'data' in res ? res.data : res) as T;
+  }
+
   async updateProject(projectId: string, data: Record<string, unknown>) {
     return this.request<Record<string, unknown>>('PATCH', EP.PROJECTS.UPDATE(projectId), data);
   }
