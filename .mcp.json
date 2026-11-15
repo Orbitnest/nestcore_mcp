@@ -1,3 +1,15 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "nestcore": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "env": {
+        "NESTCORE_API_URL": "https://api.nestcore.io",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
 }

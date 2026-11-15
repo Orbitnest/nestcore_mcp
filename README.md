@@ -20,21 +20,21 @@ The MCP server **never accesses the database directly** — all operations are p
 
 ## Prerequisites
 
-- **Node.js** v18 or later
+- **Node.js** v22 or later
 - **npm** v9 or later
-- Access to the GitHub repository `Orbitnest/nestcore_mcp` (or install `@nestcorehq/mcp-server` from npm)
+- npm (the package `@nestcorehq/mcp-server` is public), or access to the GitHub repository `Orbitnest/nestcore_mcp` for development builds
 - NestCore account — sign in at [nestcore.io](https://nestcore.io)
 
 ---
 
 ## Installation
 
-### Option A — Install directly from GitHub (recommended for new devices)
+### Option A — Install from npm (recommended)
 
-No cloning required. `npm install` downloads the package from GitHub and automatically compiles it via the `prepare` script.
+No cloning required. The package is published to npm as `@nestcorehq/mcp-server`; the pre-rename `@orbitneststudio/mcp-server` is deprecated.
 
 ```bash
-npm install -g github:Orbitnest/nestcore_mcp
+npm install -g @nestcorehq/mcp-server
 ```
 
 After installation the `nestcore-mcp` binary is available globally:
@@ -45,10 +45,16 @@ nestcore-mcp   # starts the MCP server
 
 The pre-rename `orbitnest-mcp` command is installed too and starts the same server.
 
-To install a specific commit or tag:
+To install a specific version:
 
 ```bash
-npm install -g github:Orbitnest/nestcore_mcp#v1.0.0
+npm install -g @nestcorehq/mcp-server@1.6.0
+```
+
+To install straight from GitHub instead (for example an unreleased commit), `npm install` downloads the repository and compiles it via the `prepare` script:
+
+```bash
+npm install -g github:Orbitnest/nestcore_mcp
 ```
 
 > **Private repo?** Make sure the machine has GitHub access. Either:
@@ -98,12 +104,12 @@ cp .env.example .env
 
 ## Connecting to Claude Code
 
-### Option 1 — Via GitHub (no local clone needed)
+### Option 1 — Via npx (no local clone needed)
 
-Add the server globally so it is available in any project. Claude Code will run it directly from the GitHub package:
+Add the server globally so it is available in any project. Claude Code will run the published npm package:
 
 ```bash
-claude mcp add nestcore -- npx -y github:Orbitnest/nestcore_mcp
+claude mcp add nestcore -- npx -y @nestcorehq/mcp-server
 ```
 
 Or edit `~/.claude.json` manually:
@@ -113,7 +119,7 @@ Or edit `~/.claude.json` manually:
   "mcpServers": {
     "nestcore": {
       "command": "npx",
-      "args": ["-y", "github:Orbitnest/nestcore_mcp"],
+      "args": ["-y", "@nestcorehq/mcp-server"],
       "env": {
         "NESTCORE_API_URL": "https://api.nestcore.io"
       }
@@ -149,12 +155,12 @@ claude mcp list
 
 ## Connecting to VSCode
 
-The repository includes `.vscode/mcp.json` which is automatically picked up by the **GitHub Copilot / Claude VSCode extension** with MCP support enabled.
+A `.vscode/mcp.json` in the repository folder is picked up automatically by the **GitHub Copilot / Claude VSCode extension** with MCP support enabled. The `.vscode/` folder is gitignored, so each clone creates its own.
 
 **Using a local clone (development):**
 
 1. Open this folder in VSCode
-2. The `nestcore` server entry in `.vscode/mcp.json` points to `dist/index.js` and starts automatically
+2. Create `.vscode/mcp.json` with a `nestcore` server entry whose `command` is `node` and `args` is `["${workspaceFolder}/dist/index.js"]`; it starts automatically
 
 **Using GitHub install on any other machine:**
 
@@ -166,7 +172,7 @@ The repository includes `.vscode/mcp.json` which is automatically picked up by t
     "nestcore": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:Orbitnest/nestcore_mcp"],
+      "args": ["-y", "@nestcorehq/mcp-server"],
       "env": {
         "NESTCORE_API_URL": "https://api.nestcore.io",
         "LOG_LEVEL": "info",
@@ -496,7 +502,7 @@ After signing in, tokens are persisted to `~/.nestcore/credentials.json` (mode `
 
 **MCP server not appearing in Claude Code**
 - Run `claude mcp list` to see registered servers
-- Re-register: `claude mcp remove nestcore && claude mcp add nestcore -- npx -y github:Orbitnest/nestcore_mcp`
+- Re-register: `claude mcp remove nestcore && claude mcp add nestcore -- npx -y @nestcorehq/mcp-server`
 - If using project-level `.mcp.json`, ensure you opened Claude Code from this project directory
 
 **GitHub access errors during npx install**
