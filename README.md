@@ -213,8 +213,13 @@ Use nestcore_login with:
 
 If the account has two-factor authentication on, the NestCore page in the
 browser asks for the authenticator code (or a recovery code) after the provider
-sign-in. The code is entered there, never in the chat. `nestcore_login` waits up
-to 5 minutes for the whole flow.
+sign-in. The code is entered there, never in the chat. The browser then asks
+**"Sign in to NestCore MCP?"**; click **Continue** (or **Cancel** to stop).
+`nestcore_login` waits up to 5 minutes for the whole flow.
+
+From 1.9.0 no token passes through a URL: the browser hands the local callback
+a one-time code, and the server exchanges it (with a PKCE verifier that never
+leaves your machine) for its session. Nothing usable ends up in browser history.
 
 Credentials are saved to `~/.nestcore/credentials.json` and reloaded automatically on subsequent starts.
 

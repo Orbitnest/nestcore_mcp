@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { AddressInfo } from 'node:net';
 import type { AppConfig } from '../types/config.types.js';
@@ -7,8 +7,7 @@ import { logger } from '../utils/logger.js';
 
 export type OAuthProvider = 'google' | 'github' | 'apple';
 
-/** Tokens captured from the browser-loopback OAuth flow. Shape matches what
- *  SessionService.setAuthFromSignin() expects from a password signin. */
+/** Tokens from the sign-in. Shape matches what SessionService.setAuthFromSignin() expects. */
 export interface OAuthLoginResult {
   access_token: string;
   refresh_token: string;
@@ -16,43 +15,47 @@ export interface OAuthLoginResult {
   provider: OAuthProvider;
 }
 
-/** How long we wait for the user to finish the browser flow before giving up.
- *  Five minutes: the provider sign-in plus, with two-factor on, opening an
- *  authenticator app; it matches the API's 5-minute MFA challenge. */
+/** How long we wait for the user to finish in the browser: the provider sign-in,
+ *  two-factor if it's on, and the Approve click. Matches the handoff's lifetime. */
 const LOGIN_TIMEOUT_MS = 300_000;
 
-/** Readable text for the error codes the Studio callback page relays. */
+/** Readable text for errors the browser side can report. */
 export function describeOAuthError(code: string): string {
   switch (code) {
     case 'mfa_cancelled':
       return 'Sign-in was cancelled on the NestCore two-factor page.';
     case 'mfa_required':
-      // Older Studio builds relayed this instead of showing the code step.
       return 'This account has two-factor authentication on and the NestCore page could not ask for the code. ' +
         'Retry nestcore_login, or sign in with nestcore_admin_signin and mfa_code.';
+    case 'access_denied':
+      return 'Sign-in was cancelled.';
     default:
       return `OAuth sign-in failed: ${code}`;
   }
 }
 
+const base64url = (b: Buffer) => b.toString('base64url');
+export const s256 = (verifier: string) => base64url(createHash('sha256').update(verifier).digest());
+
 /**
- * Browser + loopback OAuth login (the `gh auth login` / `gcloud` pattern).
+ * Browser sign-in through NestCore's PKCE handoff (the flow the NestCore Agent
+ * desktop app uses), so no token ever appears in a URL or in browser history:
  *
- * Why a loopback relay and not a direct callback: the API delivers tokens in a
- * URL *fragment* to the studio callback page, and a fragment is never sent to a
- * server. The studio page reads the fragment client-side and re-emits the
- * tokens to this loopback server as a *query string* (server-readable), keyed
- * by a one-time `cli_state` nonce we mint here and thread through the API's
- * signed OAuth state. See studio/src/app/auth/oauth/callback/page.tsx.
- *
- * Nothing on the backend changes — we reuse the existing
- * `/api/auth/oauth/{provider}/start` flow (PKCE, signed state, token issuance).
+ *  1. We mint a PKCE verifier + challenge and a state nonce, listen on a
+ *     one-time 127.0.0.1 port, and register a handoff with the API
+ *     (GET /auth/handoff/start, redirect_uri = that loopback).
+ *  2. The browser signs in with the chosen provider (and two-factor, if on) and
+ *     lands on Studio's approval page for this handoff. Approve sends the
+ *     browser to our loopback with only a one-time `code` and our `state`.
+ *  3. We exchange code + verifier at POST /auth/handoff/token for the session.
+ *     The code is useless without the verifier, which never leaves this process,
+ *     and it is single-use and expires in 5 minutes.
  */
-export async function loginWithOAuth(
-  provider: OAuthProvider,
-  config: AppConfig,
-): Promise<OAuthLoginResult> {
-  const cliState = randomBytes(16).toString('hex');
+export async function loginWithOAuth(provider: OAuthProvider, config: AppConfig): Promise<OAuthLoginResult> {
+  const api = `${config.apiUrl.replace(/\/+$/, '')}${(config.apiBasePath || '/api').replace(/\/+$/, '')}`;
+  const verifier = base64url(randomBytes(32)); // 43 chars
+  const challenge = s256(verifier);
+  const state = randomBytes(16).toString('hex');
 
   return new Promise<OAuthLoginResult>((resolve, reject) => {
     let settled = false;
@@ -64,120 +67,112 @@ export async function loginWithOAuth(
       fn();
     };
 
-    const server = http.createServer((req, res) => {
-      // Only the loopback callback path matters; ignore favicon etc.
+    const server = http.createServer(async (req, res) => {
       const reqUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
       if (reqUrl.pathname !== '/callback') {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('Not found');
         return;
       }
-
       const q = reqUrl.searchParams;
-      const returnedState = q.get('cli_state');
-      const oauthError = q.get('oauth_error') ?? q.get('error');
-      const accessToken = q.get('access_token');
-      const refreshToken = q.get('refresh_token');
-
-      // CSRF: the relay must carry back the exact nonce we minted. A local
-      // process that didn't go through our signed-state round-trip can't.
-      if (returnedState !== cliState) {
+      // CSRF: only the redirect of OUR handoff carries our state.
+      if (q.get('state') !== state) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(resultPage('error', 'State mismatch — please retry sign-in from your terminal.'));
+        res.end(resultPage('error', 'State mismatch — please retry sign-in from your editor.'));
         return;
       }
-
-      if (oauthError) {
+      const error = q.get('error') ?? q.get('oauth_error');
+      if (error) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(resultPage('error', describeOAuthError(oauthError)));
-        finish(() => reject(new Error(describeOAuthError(oauthError))));
+        res.end(resultPage('error', describeOAuthError(error)));
+        finish(() => reject(new Error(describeOAuthError(error))));
         return;
       }
-
-      if (!accessToken || !refreshToken) {
+      const code = q.get('code');
+      if (!code) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(resultPage('error', 'Sign-in did not return tokens. Please retry.'));
-        finish(() => reject(new Error('OAuth sign-in did not return tokens')));
+        res.end(resultPage('error', 'Sign-in did not return a code. Please retry.'));
+        finish(() => reject(new Error('OAuth sign-in did not return a code')));
         return;
       }
-
-      const expiresInRaw = q.get('expires_in');
-      const expiresIn = expiresInRaw ? Number(expiresInRaw) : undefined;
-
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(resultPage('success', 'Signed in successfully. You can close this tab and return to your terminal.'));
-      finish(() =>
-        resolve({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_in: Number.isFinite(expiresIn) ? expiresIn : undefined,
-          provider,
-        }),
-      );
+      try {
+        const r = await fetch(`${api}/auth/handoff/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'NestCore MCP' },
+          body: JSON.stringify({ code, code_verifier: verifier }),
+        });
+        const body = (await r.json().catch(() => ({}))) as Record<string, any>;
+        if (!r.ok || !body.access_token || !body.refresh_token) {
+          const msg = body?.message || `Code exchange failed (${r.status})`;
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end(resultPage('error', `Sign-in failed: ${msg}`));
+          finish(() => reject(new Error(`OAuth sign-in failed: ${msg}`)));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(resultPage('success', 'Signed in successfully. You can close this tab and return to your editor.'));
+        finish(() =>
+          resolve({
+            access_token: body.access_token,
+            refresh_token: body.refresh_token,
+            expires_in: typeof body.expires_in === 'number' ? body.expires_in : undefined,
+            provider,
+          }),
+        );
+      } catch (err) {
+        res.writeHead(502, { 'Content-Type': 'text/html' });
+        res.end(resultPage('error', 'Could not reach NestCore to finish sign-in. Please retry.'));
+        finish(() => reject(new Error(`OAuth code exchange failed: ${err instanceof Error ? err.message : String(err)}`)));
+      }
     });
 
     const timer = setTimeout(() => {
-      finish(() =>
-        reject(new Error(`Timed out after ${LOGIN_TIMEOUT_MS / 1000}s waiting for browser sign-in.`)),
-      );
+      finish(() => reject(new Error(`Timed out after ${LOGIN_TIMEOUT_MS / 1000}s waiting for browser sign-in.`)));
     }, LOGIN_TIMEOUT_MS);
 
-    server.on('error', (err) => {
-      finish(() => reject(new Error(`Could not start local login server: ${err.message}`)));
-    });
+    server.on('error', (err) => finish(() => reject(new Error(`Could not start local login server: ${err.message}`))));
 
-    // Bind to an OS-assigned free port on loopback only.
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, '127.0.0.1', async () => {
       const { port } = server.address() as AddressInfo;
-      const startUrl = buildStartUrl(config, provider, port, cliState);
-      logger.info('Opening browser for OAuth sign-in', { provider, port });
-      logger.info(`If your browser did not open, visit: ${startUrl}`);
-      openBrowser(startUrl);
+      try {
+        const startUrl = new URL(`${api}/auth/handoff/start`);
+        startUrl.searchParams.set('redirect_uri', `http://127.0.0.1:${port}/callback`);
+        startUrl.searchParams.set('state', state);
+        startUrl.searchParams.set('code_challenge', challenge);
+        startUrl.searchParams.set('code_challenge_method', 'S256');
+        startUrl.searchParams.set('client', 'nestcore-mcp');
+        const r = await fetch(startUrl, { headers: { Accept: 'application/json', 'User-Agent': 'NestCore MCP' } });
+        const h = (await r.json().catch(() => ({}))) as { handoffId?: string; message?: string };
+        if (!r.ok || !h.handoffId) throw new Error(h.message || `handoff start failed (${r.status})`);
+        // Provider sign-in first, then Studio's approval page for this handoff.
+        const browserUrl = new URL(`${api}/auth/oauth/${provider}/start`);
+        browserUrl.searchParams.set('redirect_to', `/auth/handoff?h=${h.handoffId}`);
+        logger.info('Opening browser for sign-in', { provider, port });
+        logger.info(`If your browser did not open, visit: ${browserUrl.toString()}`);
+        openBrowser(browserUrl.toString());
+      } catch (err) {
+        finish(() => reject(new Error(`Could not start sign-in: ${err instanceof Error ? err.message : String(err)}`)));
+      }
     });
   });
 }
 
-/**
- * Build the API start URL. `redirect_to` is a studio-origin *path* carrying our
- * loopback port + nonce; the API's safeRedirect() preserves the query string,
- * and the studio callback page relays the fragment tokens back to us.
- */
-function buildStartUrl(
-  config: AppConfig,
-  provider: OAuthProvider,
-  port: number,
-  cliState: string,
-): string {
-  const base = config.apiUrl.replace(/\/+$/, '');
-  const basePath = (config.apiBasePath || '/api').replace(/\/+$/, '');
-  const url = new URL(`${base}${basePath}/auth/oauth/${provider}/start`);
-  // URLSearchParams encodes the nested ?cli_port=…&cli_state=… safely.
-  url.searchParams.set(
-    'redirect_to',
-    `/auth/oauth/callback?cli_port=${port}&cli_state=${cliState}`,
-  );
-  return url.toString();
-}
-
 /** Open the default browser without adding a dependency. Best-effort. */
 function openBrowser(url: string): void {
+  if (process.env.NESTCORE_NO_BROWSER === '1') return; // tests / headless: the URL is logged above
   try {
     const platform = process.platform;
     const [cmd, args] =
       platform === 'win32'
-        ? ['cmd', ['/c', 'start', '""', url]]
+        ? ['cmd', ['/c', 'start', '""', url.replace(/&/g, '^&')]]
         : platform === 'darwin'
           ? ['open', [url]]
           : ['xdg-open', [url]];
-    const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
-    child.on('error', (err) => {
-      logger.warn('Failed to open browser automatically', { error: err.message });
-    });
+    const child = spawn(cmd, args as string[], { stdio: 'ignore', detached: true });
+    child.on('error', (err) => logger.warn('Failed to open browser automatically', { error: err.message }));
     child.unref();
   } catch (err) {
-    logger.warn('Failed to open browser automatically', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logger.warn('Failed to open browser automatically', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
