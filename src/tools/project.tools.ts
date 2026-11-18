@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse, ValidationError } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { redactSecrets } from '../utils/redact.js';
 
 export function registerProjectTools(server: McpServer, ctx: ToolContext): void {
 
@@ -31,7 +32,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       }
       const result = await ctx.apiClient.createProject({ name, description, kind, ...(kind === 'agent' && agent ? { agent } : {}) });
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -49,7 +50,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       await ctx.session.ensureAuthenticated();
       const result = await ctx.apiClient.getProjectEligibility(kind ?? 'app');
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -67,7 +68,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       await ctx.session.ensureAuthenticated();
       const result = await ctx.apiClient.listProjects(kind);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -86,7 +87,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.setProjectStatus(id, status);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -103,7 +104,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getProject(id);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -127,7 +128,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       if (settings) data.settings = settings;
       const result = await ctx.apiClient.updateProject(id, data);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -238,7 +239,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.createProjectApiKeys(id, { name: description || 'default' });
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -255,7 +256,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getProjectApiKeys(id);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -272,7 +273,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getProjectHealth(id);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
