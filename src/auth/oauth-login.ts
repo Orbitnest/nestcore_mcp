@@ -16,8 +16,24 @@ export interface OAuthLoginResult {
   provider: OAuthProvider;
 }
 
-/** How long we wait for the user to finish the browser flow before giving up. */
-const LOGIN_TIMEOUT_MS = 180_000;
+/** How long we wait for the user to finish the browser flow before giving up.
+ *  Five minutes: the provider sign-in plus, with two-factor on, opening an
+ *  authenticator app; it matches the API's 5-minute MFA challenge. */
+const LOGIN_TIMEOUT_MS = 300_000;
+
+/** Readable text for the error codes the Studio callback page relays. */
+export function describeOAuthError(code: string): string {
+  switch (code) {
+    case 'mfa_cancelled':
+      return 'Sign-in was cancelled on the NestCore two-factor page.';
+    case 'mfa_required':
+      // Older Studio builds relayed this instead of showing the code step.
+      return 'This account has two-factor authentication on and the NestCore page could not ask for the code. ' +
+        'Retry nestcore_login, or sign in with nestcore_admin_signin and mfa_code.';
+    default:
+      return `OAuth sign-in failed: ${code}`;
+  }
+}
 
 /**
  * Browser + loopback OAuth login (the `gh auth login` / `gcloud` pattern).
@@ -73,8 +89,8 @@ export async function loginWithOAuth(
 
       if (oauthError) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(resultPage('error', `Sign-in failed: ${escapeHtml(oauthError)}`));
-        finish(() => reject(new Error(`OAuth sign-in failed: ${oauthError}`)));
+        res.end(resultPage('error', describeOAuthError(oauthError)));
+        finish(() => reject(new Error(describeOAuthError(oauthError))));
         return;
       }
 

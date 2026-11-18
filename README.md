@@ -211,6 +211,11 @@ Use nestcore_login with:
   provider: "google"   # or "github" / "apple"
 ```
 
+If the account has two-factor authentication on, the NestCore page in the
+browser asks for the authenticator code (or a recovery code) after the provider
+sign-in. The code is entered there, never in the chat. `nestcore_login` waits up
+to 5 minutes for the whole flow.
+
 Credentials are saved to `~/.nestcore/credentials.json` and reloaded automatically on subsequent starts.
 
 > `nestcore_login` opens a browser, so run it on the machine where the MCP

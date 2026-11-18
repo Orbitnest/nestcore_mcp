@@ -49,7 +49,9 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   // localhost loopback server. See ../auth/oauth-login.ts.
   server.registerTool('nestcore_login', {
     description:
-      'Sign in as an NestCore admin using Google, GitHub, or Apple. Opens your browser to complete sign-in, then captures the session automatically. Use this if you signed up with a social provider (no password). For password accounts use nestcore_admin_signin.',
+      'Sign in as a NestCore admin using Google, GitHub, or Apple. Opens your browser to complete sign-in, then captures the session automatically. ' +
+      'If the account has two-factor authentication, the NestCore page in the browser asks for the authenticator code (never ask the user to paste it here). ' +
+      'Waits up to 5 minutes. Use this if you signed up with a social provider (no password). For password accounts use nestcore_admin_signin.',
     inputSchema: { provider: z.enum(['google', 'github', 'apple']).default('google') },
   }, async ({ provider }) => {
     try {
