@@ -21,6 +21,7 @@
     ".env.example",
     ".mcp.json",
     "README.md",
+    "CHANGELOG.md",
     "tsconfig.json"
   ],
   "publishConfig": {
