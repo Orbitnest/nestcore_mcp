@@ -8,6 +8,8 @@ import type { ToolEntry, ToolRegistry } from './registry.js';
 import { DYNAMIC_SQL_TOOL, LOCAL_SESSION_TOOLS, NAMESPACES, SANDBOX_EXCLUDED } from './catalog.js';
 import { generateDeclarations, type Declarations } from './typegen.js';
 import { SearchIndex, SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT, formatSearchResult } from './search.js';
+import type { CodeModeConfig } from '../types/config.types.js';
+import { MAX_CODE_LENGTH, runExecute, type ExecuteDeps } from './execute.js';
 
 export interface CatalogOptions {
   /** NESTCORE_MCP_ALLOW_WRITES. When false only read methods (and read-only SQL) are exposed. */
@@ -69,6 +71,50 @@ export function registerSearchTool(server: McpServer, catalog: CodeModeCatalog):
       return text(
         formatSearchResult(query, matches, (p) => catalog.declarations.byPath.get(p), catalog.namespaces),
       );
+    },
+  );
+}
+
+export function executeToolDescription(catalog: CodeModeCatalog, config: CodeModeConfig): string {
+  return [
+    'Run JavaScript against the NestCore API in a sandbox. Call `search` first to get method signatures.',
+    '`code` is the body of an async function: `await nestcore.<namespace>.<method>({ ...args })`, `return` the value you want back (JSON),',
+    'console.log() goes to `logs`. Methods throw an Error with .code/.type on failure (catch it to handle). No network, fs, require/import or timers.',
+    `Namespaces: ${catalog.namespaces.join(', ')}.`,
+    `Limits per run: ${config.timeoutMs} ms, ${config.memoryMb} MB, ${config.maxCalls} calls, ${config.maxOutputBytes} bytes of output.`,
+    catalog.options.allowWrites
+      ? 'Destructive methods keep their own confirm flag; those without one need confirm: true (or a user prompt). If a call fails with AUTH_ERROR, call the nestcore_login tool.'
+      : 'Writes are disabled: only read methods and read-only SQL are available. If a call fails with AUTH_ERROR, call the nestcore_login tool.',
+    'Example: const s = await nestcore.db.getSchema({}); return s.tables.map(t => t.name);',
+  ].join('\n');
+}
+
+export function registerExecuteTool(server: McpServer, deps: ExecuteDeps): void {
+  const { catalog, config } = deps;
+  server.registerTool(
+    'execute',
+    {
+      description: executeToolDescription(catalog, config),
+      inputSchema: {
+        code: z.string().min(1).max(MAX_CODE_LENGTH).describe('Body of an async function; `return` the result'),
+        timeoutMs: z
+          .number()
+          .int()
+          .min(100)
+          .max(config.timeoutMs)
+          .optional()
+          .describe(`Wall-clock limit for this run (default and max ${config.timeoutMs})`),
+      },
+      annotations: {
+        readOnlyHint: !catalog.options.allowWrites,
+        destructiveHint: catalog.options.allowWrites,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ code, timeoutMs }, extra) => {
+      const { body, isError } = await runExecute(code, timeoutMs, deps, extra);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(body) }], ...(isError ? { isError: true } : {}) };
     },
   );
 }

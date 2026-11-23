@@ -33,6 +33,19 @@ function envInt(key: string, fallback: number): number {
   return isNaN(parsed) ? fallback : parsed;
 }
 
+/** Positive integer from `NESTCORE_<name>` / `ORBITNEST_<name>`, clamped to [min, max]. */
+function brandInt(name: string, fallback: number, min: number, max: number): number {
+  const parsed = parseInt(brandEnv(name) ?? '', 10);
+  if (isNaN(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function brandBool(name: string, fallback: boolean): boolean {
+  const val = brandEnv(name);
+  if (val === undefined || val === '') return fallback;
+  return !/^(false|0|no|off)$/i.test(val.trim());
+}
+
 export function loadConfig(): AppConfig {
   return {
     // A trailing slash would produce `//api/...` URLs that 404.
@@ -46,5 +59,12 @@ export function loadConfig(): AppConfig {
     blockAuthTableMutations: envBool('BLOCK_AUTH_TABLE_MUTATIONS', true),
     schemaCacheTtl: envInt('SCHEMA_CACHE_TTL', 300000),
     tokenRefreshThreshold: envInt('TOKEN_REFRESH_THRESHOLD', 60000),
+    codeMode: {
+      allowWrites: brandBool('MCP_ALLOW_WRITES', true),
+      timeoutMs: brandInt('MCP_EXEC_TIMEOUT_MS', 30000, 100, 600000),
+      memoryMb: brandInt('MCP_EXEC_MEMORY_MB', 128, 8, 2048),
+      maxCalls: brandInt('MCP_EXEC_MAX_CALLS', 50, 1, 10000),
+      maxOutputBytes: brandInt('MCP_EXEC_MAX_OUTPUT_BYTES', 100000, 1000, 10000000),
+    },
   };
 }
