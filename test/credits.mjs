@@ -56,6 +56,7 @@ process.env.HOME = home;
 process.env.USERPROFILE = home;
 process.env.NESTCORE_API_URL = apiUrl;
 process.env.LOG_LEVEL = 'error';
+process.env.NESTCORE_MCP_MODE = 'tools'; // these checks call the direct tools
 process.chdir(work);
 
 const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');

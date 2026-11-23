@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ToolContext } from '../tools/index.js';
 import { requireProjectId } from '../utils/validators.js';
 import { formatErrorResponse } from '../utils/errors.js';
+import { loadProjectPromptFooter } from '../codemode/instructions.js';
 
 export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolContext): void {
 
@@ -52,8 +53,7 @@ export function registerProjectIntelligencePrompts(server: McpServer, ctx: ToolC
           : '[]',
         '',
         '---',
-        'You are now oriented. Proceed with the session keeping these constraints, decisions, and tasks in mind.',
-        'At the end of the session, call nestcore_sync_memory with a structured digest plus any unsaved decisions, tasks and events.',
+        ...loadProjectPromptFooter(ctx.config.codeMode.mode !== 'tools'),
       ].join('\n');
       return {
         messages: [{ role: 'user' as const, content: { type: 'text' as const, text } }],

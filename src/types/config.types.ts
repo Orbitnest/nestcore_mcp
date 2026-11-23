@@ -13,7 +13,11 @@ export interface AppConfig {
   codeMode: CodeModeConfig;
 }
 
+/** NESTCORE_MCP_MODE: `code` (search + execute + nestcore_login), `tools` (every direct tool) or `both`. */
+export type McpMode = 'code' | 'tools' | 'both';
+
 export interface CodeModeConfig {
+  mode: McpMode;
   /** NESTCORE_MCP_ALLOW_WRITES (default true). False: only read methods and read-only SQL in `execute`. */
   allowWrites: boolean;
   /** NESTCORE_MCP_EXEC_TIMEOUT_MS (default 30000): default and maximum wall clock per execute. */

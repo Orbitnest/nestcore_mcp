@@ -10,6 +10,9 @@ import { SessionTracker } from './context/session-tracker.js';
 import { registerAllTools, type ToolContext } from './tools/index.js';
 import { withLegacyToolNames } from './legacy-tool-names.js';
 import { logger } from './utils/logger.js';
+import { CodeModeCatalog, registerExecuteTool, registerSearchTool } from './codemode/tools.js';
+import { codeModeInstructions } from './codemode/instructions.js';
+import type { ToolRegistry } from './codemode/registry.js';
 
 /**
  * Build the COMPACT orientation summary served by the project://context
@@ -77,7 +80,19 @@ export function buildCompactSummary(
   return summary;
 }
 
-export async function createServer(config: AppConfig): Promise<{ server: McpServer; tracker: SessionTracker; apiClient: NestCoreClient }> {
+export interface CreatedServer {
+  server: McpServer;
+  tracker: SessionTracker;
+  apiClient: NestCoreClient;
+  /** Every tool definition (direct or not), the Code Mode source of truth. */
+  registry: ToolRegistry;
+  /** The methods `execute` exposes (null in `tools` mode). */
+  catalog: CodeModeCatalog | null;
+}
+
+export async function createServer(config: AppConfig): Promise<CreatedServer> {
+  const mode = config.codeMode.mode;
+  const codeMode = mode !== 'tools';
   const apiClient = new NestCoreClient({ apiUrl: config.apiUrl, accessToken: '' });
 
   const sessionService = new SessionService(config, apiClient);
@@ -112,7 +127,7 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
   // ── SESSION_INSTRUCTIONS ─────────────────────────────────────────────────
   // Surfaced by MCP clients as the server's system instructions — they ride
   // along on every request, so keep them SMALL. Pointers to tools, no data.
-  const SESSION_INSTRUCTIONS = [
+  const DIRECT_TOOL_INSTRUCTIONS = [
     'Persistent memory for NestCore projects (Project Intelligence). Pull context on demand; never assume it is already loaded.',
     '',
     'SESSION START: if no project is set, call nestcore_list_projects then nestcore_set_active_project.',
@@ -126,6 +141,9 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
     '',
     'SESSION END: call nestcore_sync_memory once with a digest (what was done, decisions, blockers, what\'s next) plus any unsaved decisions/tasks/events. Keep the digest concise — a summary, not a transcript or file dumps. Memory is only persisted when you call a tool.',
   ].join('\n');
+  const SESSION_INSTRUCTIONS = codeMode
+    ? codeModeInstructions(mode, config.codeMode.allowWrites)
+    : DIRECT_TOOL_INSTRUCTIONS;
 
   // ── Create MCP server ────────────────────────────────────────────────────
   const server = new McpServer(
@@ -162,22 +180,36 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
           await sessionService.ensureAuthenticated();
         } catch {
           // Clients read this resource every turn — never throw from it.
-          return emit({ error: 'Not signed in. Call nestcore_admin_signin or nestcore_login first.' });
+          return emit({
+            error: codeMode
+              ? 'Not signed in. Call the nestcore_login tool first.'
+              : 'Not signed in. Call nestcore_admin_signin or nestcore_login first.',
+          });
         }
         const session = sessionService.getSession();
         const pid = session.currentProjectId;
         if (!pid) {
-          return emit({ error: 'No active project. Call nestcore_set_active_project first.' });
+          return emit({
+            error: codeMode
+              ? 'No active project. Use execute: nestcore.projects.list({}) then nestcore.projects.setActive({ projectId }).'
+              : 'No active project. Call nestcore_set_active_project first.',
+          });
         }
         try {
           const ctx = await apiClient.getProjectContext(pid, { events: 20 });
           const summary = buildCompactSummary(ctx, session.currentProjectSlug ?? pid, RESOURCE_MAX_CHARS);
+          if (codeMode) {
+            summary.note =
+              'Compact overview only — NOT full memory. Use execute: nestcore.memory.getProjectContext({}) for detail, or nestcore.memory.search({ query }) to find specific items.';
+          }
           return emit(summary);
         } catch {
           // Never fail the session over an orientation blurb.
           return emit({
             project: session.currentProjectSlug ?? pid,
-            note: 'Context summary unavailable. Call nestcore_get_project_context for detail.',
+            note: codeMode
+              ? 'Context summary unavailable. Use execute: nestcore.memory.getProjectContext({}) for detail.'
+              : 'Context summary unavailable. Call nestcore_get_project_context for detail.',
           });
         }
       },
@@ -198,15 +230,31 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
     tracker,
   };
 
-  registerAllTools(server, toolContext);
+  // tools/both: every tool is a direct MCP tool. code: only nestcore_login
+  // (browser sign-in can take minutes, so it is never called from execute);
+  // everything else is reached through search + execute.
+  const registry = registerAllTools(
+    server,
+    toolContext,
+    mode === 'code' ? (name) => name === 'nestcore_login' : () => true,
+  );
+
+  let catalog: CodeModeCatalog | null = null;
+  if (codeMode) {
+    catalog = new CodeModeCatalog(registry, { allowWrites: config.codeMode.allowWrites });
+    registerSearchTool(server, catalog);
+    registerExecuteTool(server, { catalog, config: config.codeMode, session: sessionService, server });
+  }
 
   logger.info('MCP server initialized', {
-    tools: 'all registered',
+    mode,
+    tools: String(registry.size),
+    codeModeMethods: String(catalog?.entries.length ?? 0),
     authenticated: String(sessionService.isAuthenticated()),
     activeProject: sessionService.getSession().currentProjectId ?? 'none',
   });
 
-  return { server, tracker, apiClient };
+  return { server, tracker, apiClient, registry, catalog };
 }
 
 export async function startStdioServer(server: McpServer): Promise<void> {

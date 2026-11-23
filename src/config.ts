@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { createRequire } from 'node:module';
-import type { AppConfig } from './types/config.types.js';
+import type { AppConfig, McpMode } from './types/config.types.js';
 
 dotenv.config();
 
@@ -40,6 +40,13 @@ function brandInt(name: string, fallback: number, min: number, max: number): num
   return Math.min(max, Math.max(min, parsed));
 }
 
+function mcpMode(): McpMode {
+  const raw = (brandEnv('MCP_MODE') ?? '').trim().toLowerCase();
+  if (raw === 'code' || raw === 'tools' || raw === 'both') return raw;
+  if (raw) console.error(`[nestcore-mcp] Unknown NESTCORE_MCP_MODE "${raw}"; using "code" (valid: code, tools, both).`);
+  return 'code';
+}
+
 function brandBool(name: string, fallback: boolean): boolean {
   const val = brandEnv(name);
   if (val === undefined || val === '') return fallback;
@@ -60,6 +67,7 @@ export function loadConfig(): AppConfig {
     schemaCacheTtl: envInt('SCHEMA_CACHE_TTL', 300000),
     tokenRefreshThreshold: envInt('TOKEN_REFRESH_THRESHOLD', 60000),
     codeMode: {
+      mode: mcpMode(),
       allowWrites: brandBool('MCP_ALLOW_WRITES', true),
       timeoutMs: brandInt('MCP_EXEC_TIMEOUT_MS', 30000, 100, 600000),
       memoryMb: brandInt('MCP_EXEC_MEMORY_MB', 128, 8, 2048),
