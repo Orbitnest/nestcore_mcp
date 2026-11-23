@@ -67,19 +67,21 @@ export function unwrapToolResult(result: ToolResult): { value: unknown; failed: 
     }
   }
   const o = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  const looksLikeError =
-    !!o &&
-    typeof o.error === 'string' &&
-    (typeof o.code === 'string' || o.success === false);
+  // formatErrorResponse sets isError; a few handlers still answer refusals
+  // inline as `{ error }` / `{ success: false, error }` (e.g. a missing
+  // confirm flag), which count as failures too.
+  const looksLikeError = !!o && typeof o.error === 'string' && o.success !== true;
   return { value, failed: result?.isError === true || looksLikeError };
 }
 
 /** Error raised inside the VM for a failed tool result. */
 function toolFailure(path: string, value: unknown): HostCallError {
   const o = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
-  const code = typeof o.code === 'string' ? o.code : undefined;
-  const type = typeForCode(code, o.statusCode);
   let message = typeof o.error === 'string' ? o.error : typeof value === 'string' ? value : 'Tool call failed';
+  // Inline confirm-flag refusals carry no code; name them.
+  const code =
+    typeof o.code === 'string' ? o.code : /\b(requires?|set)\b.*\bconfirm/i.test(message) ? 'CONFIRMATION_REQUIRED' : undefined;
+  const type = code === 'CONFIRMATION_REQUIRED' ? 'guard' : typeForCode(code, o.statusCode);
   if (type === 'auth') message = `${message} ${LOGIN_HINT}`;
   const details: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(o)) if (k !== 'error' && k !== 'code') details[k] = v;
@@ -220,12 +222,19 @@ export async function runExecute(
   const body: Record<string, unknown> = { result: JSON.parse(resultJson), logs: outcome.logs, calls, executionId };
   const size = Buffer.byteLength(JSON.stringify(body));
   if (size > config.maxOutputBytes) {
-    const overhead = Buffer.byteLength(JSON.stringify({ ...body, result: '', truncated: true, totalBytes: size }));
-    const room = Math.max(0, config.maxOutputBytes - overhead - 64);
-    body.result = Buffer.from(resultJson).subarray(0, room).toString('utf8').replace(/�+$/, '');
     body.truncated = true;
     body.totalBytes = Buffer.byteLength(resultJson);
     body.note = `Result exceeded ${config.maxOutputBytes} bytes; "result" is the first part of its JSON text. Return less (filter, slice, aggregate) to get it whole.`;
+    // Logs are capped at a quarter of the budget; the rest goes to the result.
+    const overhead = Buffer.byteLength(JSON.stringify({ ...body, result: '' }));
+    let room = Math.max(0, config.maxOutputBytes - overhead - 16);
+    // JSON-escaping the preview can grow it (quotes, backslashes); shrink until it fits.
+    for (let i = 0; i < 6; i++) {
+      body.result = Buffer.from(resultJson).subarray(0, room).toString('utf8').replace(/�+$/, '');
+      const total = Buffer.byteLength(JSON.stringify(body));
+      if (total <= config.maxOutputBytes) break;
+      room = Math.max(0, room - (total - config.maxOutputBytes) - 16);
+    }
   }
   if (outcome.logsTruncated) body.logsTruncated = true;
   return { isError: false, body };

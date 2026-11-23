@@ -1,10 +1,14 @@
 /**
  * zod (v3) → TypeScript declaration emitter for Code Mode.
  *
- * Produces `declare namespace nestcore { namespace db { function getSchema(…): Promise<unknown>; } }`
+ * Produces `declare namespace nestcore { const db: { getSchema(…): Promise<unknown>; }; }`
  * from the registry, with a JSDoc comment per method (tool description) and
- * per parameter (`.describe()` text plus simple constraints). Tools declare no
- * output schemas, so every method returns `Promise<unknown>`.
+ * per parameter. Each API namespace is a `const` object type rather than a
+ * nested `namespace` of `function`s because several methods are named after
+ * reserved words (`projects.delete`, `logs.export`), which are valid property
+ * names but not valid function names. Parameter docs are the `.describe()`
+ * text plus simple constraints. Tools declare no output schemas, so every
+ * method returns `Promise<unknown>`.
  *
  * Deliberately small and dependency-free: it handles the zod constructs the
  * tool shapes use (and a few more) and falls back to `unknown`.
@@ -228,7 +232,8 @@ export function emitMethod(
   const hint = resultHint(description);
   if (hint) docLines.push(`@returns ${hint}`);
   const sig = noParams ? '()' : `(args${allOptional ? '?' : ''}: ${params})`;
-  return `${jsdoc(docLines.join('\n'), indent)}${indent}function ${entry.method}${sig}: Promise<unknown>;`;
+  // Parameter docs mention tool names too; nothing else in a declaration can.
+  return rewriteToolRefs(`${jsdoc(docLines.join('\n'), indent)}${indent}${entry.method}${sig}: Promise<unknown>;`, pathOf);
 }
 
 export interface Declarations {
@@ -245,7 +250,7 @@ export function wrapDeclarations(groups: Map<string, string[]>): string {
   const blocks: string[] = [];
   for (const [ns, decls] of groups) {
     if (!decls.length) continue;
-    blocks.push(`  namespace ${ns} {\n${decls.join('\n')}\n  }`);
+    blocks.push(`  const ${ns}: {\n${decls.join('\n')}\n  };`);
   }
   return `declare namespace nestcore {\n${blocks.join('\n')}\n}`;
 }

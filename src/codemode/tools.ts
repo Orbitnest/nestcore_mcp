@@ -51,7 +51,7 @@ export function registerSearchTool(server: McpServer, catalog: CodeModeCatalog):
     {
       description:
         'Find NestCore API methods for use inside `execute`. Returns the best matches (max 10) as TypeScript ' +
-        'declarations (`declare namespace nestcore { namespace db { function getSchema(...) } }`) with each ' +
+        'declarations (`declare namespace nestcore { const db: { getSchema(...): Promise<unknown> } }`) with each ' +
         'method\'s access class (read / write / destructive / session). Query with words, e.g. "list tables", ' +
         `"storage buckets", "add task", or a path like "db.getSchema". Namespaces: ${catalog.namespaces.join(', ')}.`,
       inputSchema: {

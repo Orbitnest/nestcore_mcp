@@ -20,11 +20,13 @@
  */
 import {
   newQuickJSWASMModuleFromVariant,
+  newVariant,
   type QuickJSWASMModule,
   type QuickJSDeferredPromise,
   type QuickJSHandle,
 } from 'quickjs-emscripten-core';
 import releaseSyncVariant from '@jitl/quickjs-wasmfile-release-sync';
+import { logger } from '../utils/logger.js';
 
 export type SandboxErrorType =
   | 'syntax'
@@ -100,7 +102,15 @@ let modulePromise: Promise<QuickJSWASMModule> | null = null;
 
 function getModule(): Promise<QuickJSWASMModule> {
   if (!modulePromise) {
-    modulePromise = newQuickJSWASMModuleFromVariant(releaseSyncVariant as never).catch((e) => {
+    // Emscripten prints to the console by default (e.g. "Aborted(...)" when a
+    // leaky runtime is disposed); route it to the logger at debug level.
+    const variant = newVariant(releaseSyncVariant as never, {
+      emscriptenModule: {
+        print: (m: string) => logger.debug('quickjs', { message: m }),
+        printErr: (m: string) => logger.debug('quickjs', { message: m }),
+      } as never,
+    });
+    modulePromise = newQuickJSWASMModuleFromVariant(variant).catch((e) => {
       modulePromise = null;
       throw e;
     });
@@ -202,8 +212,11 @@ export async function runSandboxed(code: string, host: SandboxHost, limits: Sand
   let deadline = Date.now() + limits.timeoutMs;
   let clockPaused = 0;
   let interrupted = false;
+  // > 0 while the host itself evaluates in the VM (dumping an error): never
+  // interrupt our own work, or QuickJS leaks the half-built values.
+  let hostWork = 0;
   runtime.setInterruptHandler(() => {
-    if (clockPaused === 0 && Date.now() > deadline) {
+    if (hostWork === 0 && clockPaused === 0 && Date.now() > deadline) {
       interrupted = true;
       return true;
     }
@@ -211,6 +224,15 @@ export async function runSandboxed(code: string, host: SandboxHost, limits: Sand
   });
 
   const vm = runtime.newContext();
+  const dumpError = (h: QuickJSHandle): unknown => {
+    hostWork++;
+    try {
+      return vm.dump(h);
+    } finally {
+      hostWork--;
+      h.dispose();
+    }
+  };
   const pending = new Set<QuickJSDeferredPromise>();
   const ownHandles: QuickJSHandle[] = [];
   let disposed = false;
@@ -285,8 +307,7 @@ export async function runSandboxed(code: string, host: SandboxHost, limits: Sand
     try {
       const res = runtime.executePendingJobs();
       if (res.error) {
-        const raw = vm.dump(res.error);
-        res.error.dispose();
+        const raw = dumpError(res.error);
         settle({ error: classifyVmError(raw, interrupted) });
       }
     } catch (e) {
@@ -338,8 +359,7 @@ export async function runSandboxed(code: string, host: SandboxHost, limits: Sand
 
     const preludeRes = vm.evalCode(PRELUDE, 'nestcore-prelude.js');
     if (preludeRes.error) {
-      const raw = vm.dump(preludeRes.error);
-      preludeRes.error.dispose();
+      const raw = dumpError(preludeRes.error);
       return { ok: false, error: { type: 'internal', message: `Sandbox prelude failed: ${JSON.stringify(raw)}` }, logs, logsTruncated };
     }
     const preludeFn = preludeRes.value;
@@ -353,8 +373,7 @@ export async function runSandboxed(code: string, host: SandboxHost, limits: Sand
     try {
       const callRes = vm.callFunction(preludeFn, vm.undefined, callFn, logFn, doneFn, codeH, nsH);
       if (callRes.error) {
-        const raw = vm.dump(callRes.error);
-        callRes.error.dispose();
+        const raw = dumpError(callRes.error);
         settle({ error: classifyVmError(raw, interrupted) });
       } else {
         callRes.value.dispose();
