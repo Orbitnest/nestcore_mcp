@@ -104,6 +104,20 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
       });
 
       let sql = `CREATE TABLE "${tableName}" (\n  ${colDefs.join(',\n  ')}\n)`;
+
+      // Same guard as nestcore_execute_sql: names, types and DEFAULT
+      // expressions are caller text, so `; DROP …` chaining and auth-table
+      // targets must be blocked here too. Validated before the generated
+      // (trusted) RLS statement is appended — the `;` chaining it adds would
+      // otherwise trip the injection patterns. A single CREATE TABLE is never
+      // destructive, so the keyword check (which a column named "update" would
+      // trip) is pre-confirmed; anything chained after it is caught above.
+      validateSql(sql, {
+        confirmDestructive: true,
+        blockAuthMutations: ctx.config.blockAuthTableMutations,
+        enableSqlGuard: ctx.session.getSession().safetyEnabled,
+      });
+
       if (enableRLS) {
         sql += `;\nALTER TABLE "${tableName}" ENABLE ROW LEVEL SECURITY`;
       }

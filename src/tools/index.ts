@@ -36,8 +36,20 @@ import { registerMigrationTools } from './migration.tools.js';
 import { registerBranchTools } from './branches.tools.js';
 import { registerProjectIntelligenceTools } from './project-intelligence.tools.js';
 import { registerProjectIntelligencePrompts } from '../prompts/project-intelligence.prompts.js';
+import { ToolRegistry, recordingServer } from '../codemode/registry.js';
 
-export function registerAllTools(server: McpServer, ctx: ToolContext): void {
+/**
+ * Define every tool. Each one is recorded in the returned registry (the single
+ * source of truth Code Mode generates types from and calls into); only tools
+ * for which `expose(name)` is true are registered as direct MCP tools.
+ */
+export function registerAllTools(
+  realServer: McpServer,
+  ctx: ToolContext,
+  expose: (name: string) => boolean = () => true,
+): ToolRegistry {
+  const registry = new ToolRegistry();
+  const server = recordingServer(realServer, registry, expose);
   registerAuthTools(server, ctx);
   registerProjectTools(server, ctx);
   registerDatabaseTools(server, ctx);
@@ -57,4 +69,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerBranchTools(server, ctx);
   registerProjectIntelligenceTools(server, ctx);
   registerProjectIntelligencePrompts(server, ctx);
+  return registry;
 }

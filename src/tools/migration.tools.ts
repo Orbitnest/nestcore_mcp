@@ -4,7 +4,8 @@ import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { brandEnv } from '../config.js';
 import { requireProjectId } from '../utils/validators.js';
-import { createMigrationRunner, MigrationError, type MigrationSqlClient } from '../migrations/index.js';
+import { createMigrationRunner, MigrationError, MigrationScanner, type MigrationSqlClient } from '../migrations/index.js';
+import { validateSql } from '../safety/sql.guard.js';
 
 const DEFAULT_DIR = brandEnv('MIGRATIONS_DIR') ?? 'migrations';
 
@@ -48,7 +49,29 @@ export function registerMigrationTools(server: McpServer, ctx: ToolContext): voi
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const runner = createMigrationRunner(sqlClientFor(ctx, id), migrationsDir ?? DEFAULT_DIR);
+      const dir = migrationsDir ?? DEFAULT_DIR;
+      const runner = createMigrationRunner(sqlClientFor(ctx, id), dir);
+
+      // Guard every migration that would run with the same SQL guard as
+      // nestcore_execute_sql, BEFORE anything executes: no direct auth-table
+      // mutations. Migrations are multi-statement, commented DDL by design, so
+      // the chaining/comment patterns are skipped and destructive DDL counts
+      // as confirmed by the explicit run request.
+      const pending = new Set(
+        (await runner.getStatus())
+          .filter((m) => !m.applied && (!migrationId || m.migrationId === migrationId))
+          .map((m) => m.migrationId),
+      );
+      const session = ctx.session.getSession();
+      for (const file of new MigrationScanner(dir).scan()) {
+        if (!pending.has(file.migrationId)) continue;
+        validateSql(file.up, {
+          confirmDestructive: true,
+          allowMultiStatement: true,
+          blockAuthMutations: ctx.config.blockAuthTableMutations,
+          enableSqlGuard: session.safetyEnabled,
+        });
+      }
 
       const result = migrationId ? await runner.runOne(migrationId) : await runner.runAll();
 

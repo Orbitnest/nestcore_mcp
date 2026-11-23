@@ -77,9 +77,15 @@ export function validateSql(
     confirmDestructive?: boolean;
     blockAuthMutations?: boolean;
     enableSqlGuard?: boolean;
+    /**
+     * Skip the statement-chaining / comment ("injection") patterns. Only for
+     * migration files, which are multi-statement, commented DDL by nature; the
+     * auth-table block and the destructive check still apply.
+     */
+    allowMultiStatement?: boolean;
   } = {}
 ): SqlAnalysis {
-  const { confirmDestructive = false, blockAuthMutations = true, enableSqlGuard = true } = options;
+  const { confirmDestructive = false, blockAuthMutations = true, enableSqlGuard = true, allowMultiStatement = false } = options;
 
   if (!enableSqlGuard) {
     return analyzeSql(sql);
@@ -87,7 +93,7 @@ export function validateSql(
 
   const analysis = analyzeSql(sql);
 
-  if (analysis.hasInjectionPatterns) {
+  if (analysis.hasInjectionPatterns && !allowMultiStatement) {
     throw new SafetyError(
       'Potential SQL injection pattern detected. Query blocked for safety.',
       { sql: sql.substring(0, 200), patterns: 'suspicious' }

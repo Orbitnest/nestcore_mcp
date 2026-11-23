@@ -65,9 +65,14 @@ export class ProjectContextError extends McpError {
   }
 }
 
-export function formatErrorResponse(error: unknown): { content: Array<{ type: 'text'; text: string }> } {
+/**
+ * Tool error result. `isError: true` tells MCP clients (and Code Mode's bridge)
+ * that the call failed; the text stays the `{ error, code, ... }` JSON body.
+ */
+export function formatErrorResponse(error: unknown): { content: Array<{ type: 'text'; text: string }>; isError: true } {
   if (error instanceof SafetyError) {
     return {
+      isError: true,
       content: [{
         type: 'text',
         text: JSON.stringify({
@@ -83,6 +88,7 @@ export function formatErrorResponse(error: unknown): { content: Array<{ type: 't
     const details: Record<string, unknown> = {};
     for (const k of API_DETAIL_FIELDS) if (error.details?.[k] !== undefined) details[k] = error.details[k];
     return {
+      isError: true,
       content: [{
         type: 'text',
         text: JSON.stringify({
@@ -97,6 +103,7 @@ export function formatErrorResponse(error: unknown): { content: Array<{ type: 't
 
   if (error instanceof McpError) {
     return {
+      isError: true,
       content: [{
         type: 'text',
         text: JSON.stringify({
@@ -109,6 +116,7 @@ export function formatErrorResponse(error: unknown): { content: Array<{ type: 't
 
   const message = error instanceof Error ? error.message : String(error);
   return {
+    isError: true,
     content: [{
       type: 'text',
       text: JSON.stringify({ error: message, code: 'UNKNOWN_ERROR' }, null, 2),
