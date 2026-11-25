@@ -2,7 +2,24 @@ import dotenv from 'dotenv';
 import { createRequire } from 'node:module';
 import type { AppConfig, McpMode } from './types/config.types.js';
 
-dotenv.config();
+/**
+ * The `.env` file the server reads, if any. Never an implicit `<cwd>/.env`:
+ * MCP hosts can start the server inside the repository the user opened, and a
+ * `.env` shipped with an untrusted repo must not choose where admin tokens and
+ * the sign-in handoff go, or switch off the SQL guards. Settings come from the
+ * real environment (the MCP client's env block); a file is read only when
+ * `NESTCORE_ENV_FILE` (or `ORBITNEST_ENV_FILE`) names it explicitly. Real env
+ * vars always win over the file.
+ */
+export function envFile(): string | undefined {
+  return process.env.NESTCORE_ENV_FILE || process.env.ORBITNEST_ENV_FILE || undefined;
+}
+
+const explicitEnvFile = envFile();
+if (explicitEnvFile) {
+  const { error } = dotenv.config({ path: explicitEnvFile, quiet: true });
+  if (error) console.error(`[nestcore-mcp] Could not read NESTCORE_ENV_FILE ${explicitEnvFile}: ${error.message}`);
+}
 
 // The published version is the single source of truth (dist/ and src/ both sit
 // one level below package.json).

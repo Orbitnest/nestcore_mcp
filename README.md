@@ -86,17 +86,22 @@ npm install   # also runs `npm run build` automatically via prepare script
 
 All settings are passed as environment variables. No `.env` file is required when configuring via an MCP client (see below) — simply set them in the `env` block of your MCP config.
 
-For standalone use, copy the example file:
+The server does **not** read a `.env` from its working directory: MCP hosts may start it inside the repository you opened, and a `.env` committed to someone else's repo must not decide where your admin session is sent. For standalone use, copy the example file and point `NESTCORE_ENV_FILE` at it (or use Node's own `--env-file`):
 
 ```bash
 cp .env.example .env
-# then edit .env as needed
+# then edit .env as needed, and run with either:
+NESTCORE_ENV_FILE=.env npm start
+node --env-file=.env dist/index.js
 ```
+
+Variables set in the real environment always win over the file.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NESTCORE_API_URL` | `https://api.nestcore.io` | NestCore backend URL (falls back to `ORBITNEST_API_URL`) |
-| `NESTCORE_API_BASE_PATH` | `/api` | API base path (falls back to `ORBITNEST_API_BASE_PATH`) |
+| `NESTCORE_API_BASE_PATH` | `/api` | API base path, a plain path such as `/api` (falls back to `ORBITNEST_API_BASE_PATH`) |
+| `NESTCORE_ENV_FILE` | _(unset)_ | Path of a `.env` file to read settings from (falls back to `ORBITNEST_ENV_FILE`); no file is read otherwise |
 | `NESTCORE_MIGRATIONS_DIR` | `migrations` | Default migrations directory (falls back to `ORBITNEST_MIGRATIONS_DIR`) |
 | `MCP_SERVER_NAME` | `nestcore` | MCP server identifier |
 | `LOG_LEVEL` | `info` | Logging level: `debug`, `info`, `warn`, `error` |

@@ -37,6 +37,62 @@ export function describeOAuthError(code: string): string {
 const base64url = (b: Buffer) => b.toString('base64url');
 export const s256 = (verifier: string) => base64url(createHash('sha256').update(verifier).digest());
 
+const isLoopback = (host: string) => ['localhost', '127.0.0.1', '[::1]', '::1'].includes(host);
+
+/**
+ * `${apiUrl}${apiBasePath}` for the sign-in handoff, refusing anything that
+ * would move it off the configured API host. A base path is a plain path
+ * (`/api`); raw concatenation of e.g. `.evil.example/x` or `:8080` would
+ * otherwise change the authority. Like NestCoreClient, http is only allowed
+ * for loopback (the handoff code and PKCE verifier travel on this URL).
+ */
+export function oauthApiBase(apiUrl: string, apiBasePath?: string): string {
+  const basePath = (apiBasePath || '/api').replace(/\/+$/, '');
+  if (basePath && !/^\/[A-Za-z0-9._~\-\/]*$/.test(basePath)) {
+    throw new Error(`Invalid NESTCORE_API_BASE_PATH "${apiBasePath}": use a plain path such as /api.`);
+  }
+  let origin: URL;
+  try {
+    origin = new URL(apiUrl);
+  } catch {
+    throw new Error(`Invalid NESTCORE_API_URL: ${apiUrl}`);
+  }
+  if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && isLoopback(origin.hostname))) {
+    throw new Error(`Refusing to sign in through ${apiUrl}: use https:// (http is only allowed for localhost).`);
+  }
+  if (origin.username || origin.password || origin.search || origin.hash) {
+    throw new Error(`Invalid NESTCORE_API_URL: ${apiUrl}`);
+  }
+  const base = `${apiUrl.replace(/\/+$/, '')}${basePath}`;
+  if (new URL(base).origin !== origin.origin) {
+    throw new Error(`Invalid NESTCORE_API_BASE_PATH "${apiBasePath}": it changes the API host.`);
+  }
+  return base;
+}
+
+/**
+ * The command that opens `url` in the default browser, run WITHOUT a shell
+ * (args array, shell: false), or null when the URL is not a plain http(s) URL.
+ * On Windows `cmd /c start` would re-parse the URL (`|`, `^`, `%` ...), so
+ * url.dll's FileProtocolHandler is used, as in the CLI.
+ */
+export function browserCommand(url: string, platform: NodeJS.Platform = process.platform): [string, string[]] | null {
+  // Control characters, whitespace, quotes and shell metacharacters never
+  // appear in the sign-in URL we build (query values are percent-encoded);
+  // refusing them keeps any opener from seeing extra arguments or operators.
+  if (/[\u0000- \u007f-\u009f"<>^`{|}\\]/.test(url)) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  if (platform === 'win32') return ['rundll32', ['url.dll,FileProtocolHandler', url]];
+  if (platform === 'darwin') return ['open', [url]];
+  return ['xdg-open', [url]];
+}
+
 /**
  * Browser sign-in through NestCore's PKCE handoff (the flow the NestCore Agent
  * desktop app uses), so no token ever appears in a URL or in browser history:
@@ -52,7 +108,7 @@ export const s256 = (verifier: string) => base64url(createHash('sha256').update(
  *     and it is single-use and expires in 5 minutes.
  */
 export async function loginWithOAuth(provider: OAuthProvider, config: AppConfig): Promise<OAuthLoginResult> {
-  const api = `${config.apiUrl.replace(/\/+$/, '')}${(config.apiBasePath || '/api').replace(/\/+$/, '')}`;
+  const api = oauthApiBase(config.apiUrl, config.apiBasePath);
   const verifier = base64url(randomBytes(32)); // 43 chars
   const challenge = s256(verifier);
   const state = randomBytes(16).toString('hex');
@@ -160,15 +216,14 @@ export async function loginWithOAuth(provider: OAuthProvider, config: AppConfig)
 /** Open the default browser without adding a dependency. Best-effort. */
 function openBrowser(url: string): void {
   if (process.env.NESTCORE_NO_BROWSER === '1') return; // tests / headless: the URL is logged above
+  const command = browserCommand(url);
+  if (!command) {
+    logger.warn('Not opening the sign-in URL automatically: it is not a plain http(s) URL');
+    return;
+  }
   try {
-    const platform = process.platform;
-    const [cmd, args] =
-      platform === 'win32'
-        ? ['cmd', ['/c', 'start', '""', url.replace(/&/g, '^&')]]
-        : platform === 'darwin'
-          ? ['open', [url]]
-          : ['xdg-open', [url]];
-    const child = spawn(cmd, args as string[], { stdio: 'ignore', detached: true });
+    const [cmd, args] = command;
+    const child = spawn(cmd, args, { stdio: 'ignore', detached: true, shell: false, windowsHide: true });
     child.on('error', (err) => logger.warn('Failed to open browser automatically', { error: err.message }));
     child.unref();
   } catch (err) {

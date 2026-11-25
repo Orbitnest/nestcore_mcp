@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.2.0 (2026-11-25)
+
+Hardening against untrusted workspaces (security audit NV-20, NV-21).
+
+### Changed (may affect setups)
+
+- **`<cwd>/.env` is no longer loaded.** MCP hosts can start the server inside
+  the repository you opened, so a `.env` shipped with that repo could pick the
+  API host and base path (where your admin session and the `nestcore_login`
+  handoff go) or switch off `ENABLE_SQL_GUARD`. Settings now come from the real
+  environment (the MCP client's `env` block). If you relied on a `.env` file,
+  set `NESTCORE_ENV_FILE=/path/to/.env` (or run `node --env-file=.env
+  dist/index.js`); real env vars still win over the file.
+- `nestcore_login` refuses an `NESTCORE_API_BASE_PATH` that is not a plain path
+  (for example `.evil.example/x` or `:8080`, which changed the host the handoff
+  went to), an API URL with credentials in it, and cleartext http to anything
+  but localhost.
+
+### Fixed
+
+- The browser for `nestcore_login` is opened without a shell. On Windows it
+  used `cmd /c start` with only `&` escaped, so `|` or `^` in a configured URL
+  reached cmd.exe; it now uses `rundll32 url.dll,FileProtocolHandler` like the
+  CLI. On every platform only http(s) URLs without whitespace, control
+  characters or shell metacharacters are opened; otherwise the URL is only
+  logged.
+
 ## 2.1.0 (2026-11-25)
 
 Security hardening of the tool modules (admin, auth, credits, integrations,
