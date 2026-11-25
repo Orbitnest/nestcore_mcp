@@ -3,6 +3,14 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+// Bounds for tool inputs (the API enforces its own limits too).
+const NAME = z.string().min(1).max(128);
+const SOURCE = z.string().min(1).max(1_000_000);
+const DESCRIPTION = z.string().max(1000);
+const SCHEDULE = z.string().min(1).max(100);
+const TIMEZONE = z.string().min(1).max(64);
 
 const SCHEDULE_PRESETS: Record<string, string> = {
   'every-minute':     '* * * * *',
@@ -36,11 +44,11 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
     description: 'Create a background job that runs on a cron schedule. Write the same handler as edge functions.',
     inputSchema: {
       projectId: z.string().optional(),
-      name: z.string().min(1),
-      description: z.string().optional(),
-      sourceCode: z.string().min(1),
-      schedule: z.string().describe('Cron expression (e.g. "*/5 * * * *") or preset: every-minute, every-5-minutes, every-15-minutes, every-hour, every-6-hours, daily, weekly'),
-      timezone: z.string().optional().describe('IANA timezone, default UTC'),
+      name: NAME,
+      description: DESCRIPTION.optional(),
+      sourceCode: SOURCE,
+      schedule: SCHEDULE.describe('Cron expression (e.g. "*/5 * * * *") or preset: every-minute, every-5-minutes, every-15-minutes, every-hour, every-6-hours, daily, weekly'),
+      timezone: TIMEZONE.optional().describe('IANA timezone, default UTC'),
       timeout: z.enum(['10s', '30s', '60s', '120s']).optional().describe('Max execution time. Default 30s.'),
     },
   }, async ({ projectId, name, description, sourceCode, schedule, timezone, timeout }) => {
@@ -84,15 +92,13 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
   // ─── Get Job ───
   server.registerTool('nestcore_get_job', {
     description: 'Get details of a specific background job including its source code and schedule.',
-    inputSchema: { projectId: z.string().optional(), jobName: z.string() },
+    inputSchema: { projectId: z.string().optional(), jobName: NAME },
   }, async ({ projectId, jobName }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getJob(id, jobName);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'background job source code and description written by workspace members');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -103,11 +109,11 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
     description: 'Update a background job\'s source code, schedule, description, or timeout.',
     inputSchema: {
       projectId: z.string().optional(),
-      jobName: z.string(),
-      sourceCode: z.string().optional(),
-      description: z.string().optional(),
-      schedule: z.string().optional().describe('Cron expression or preset'),
-      timezone: z.string().optional(),
+      jobName: NAME,
+      sourceCode: SOURCE.optional(),
+      description: DESCRIPTION.optional(),
+      schedule: SCHEDULE.optional().describe('Cron expression or preset'),
+      timezone: TIMEZONE.optional(),
       status: z.enum(['active', 'inactive']).optional(),
       timeout: z.enum(['10s', '30s', '60s', '120s']).optional(),
     },
@@ -137,7 +143,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
     description: 'Delete a background job. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
-      jobName: z.string(),
+      jobName: NAME,
       confirmDeletion: z.boolean(),
     },
   }, async ({ projectId, jobName, confirmDeletion }) => {
@@ -165,7 +171,7 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
     description: 'Manually trigger a background job to run immediately.',
     inputSchema: {
       projectId: z.string().optional(),
-      jobName: z.string(),
+      jobName: NAME,
     },
   }, async ({ projectId, jobName }) => {
     try {
@@ -185,17 +191,15 @@ export function registerBackgroundJobsTools(server: McpServer, ctx: ToolContext)
     description: 'Retrieve execution history (runs) for a specific background job.',
     inputSchema: {
       projectId: z.string().optional(),
-      jobName: z.string(),
-      limit: z.number().optional(),
+      jobName: NAME,
+      limit: z.number().int().min(1).max(1000).optional(),
     },
   }, async ({ projectId, jobName, limit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getJobRuns(id, jobName, { limit });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'background job run output and errors (from job code)');
     } catch (error) {
       return formatErrorResponse(error);
     }

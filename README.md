@@ -492,7 +492,7 @@ matching `nestcore_*` tool, so clients with a cached tool list keep working.
 | `nestcore_bulk_insert` | `db.bulkInsert` | write | Insert multiple rows into a table in a single transaction. |
 | `nestcore_bulk_update` | `db.bulkUpdate` | write | Update multiple rows in a table. |
 | `nestcore_bulk_delete` | `db.bulkDelete` | destructive (`confirmDeletion`) | Delete multiple rows from a table by match conditions. |
-| `nestcore_get_connection_string` | `db.getConnectionString` | read | Get the direct Postgres connection string for a project (only when the deployment has direct connections enabled). |
+| `nestcore_get_connection_string` | `db.getConnectionString` | read | Get the direct Postgres connection details for a project (only when the deployment has direct connections enabled). The password is masked unless `revealPassword: true`. |
 | `nestcore_enable_extension` | `db.enableExtension` | write | Enable a Postgres extension on a project (e.g. |
 
 ### Row-Level Security — `rls` (6)
@@ -588,7 +588,7 @@ matching `nestcore_*` tool, so clients with a cached tool list keep working.
 | `nestcore_create_branch` | `branches.create` | write | Create the Development branch of a project if it has none (idempotent). |
 | `nestcore_reset_branch` | `branches.reset` | destructive (`confirm`) | Rebuild Development from Production: drops Development's database and re-clones Production's schema; ALL Development rows, end users and… |
 | `nestcore_branch_changes` | `branches.changes` | read | Schema changes recorded on Development and not yet promoted (DDL from the SQL editor, table editor, RLS, realtime, CLI or MCP), in order. |
-| `nestcore_promote_branch` | `branches.promote` | write (`confirmDestructive`) | Promote Development to Production. |
+| `nestcore_promote_branch` | `branches.promote` | destructive (`confirmDestructive`) | Promote Development to Production. |
 
 ### Admins — `admins` (5)
 
@@ -612,7 +612,7 @@ matching `nestcore_*` tool, so clients with a cached tool list keep working.
 | Tool | Code Mode method | Class | Description |
 |------|------------------|-------|-------------|
 | `nestcore_get_auth_security` | `authSecurity.get` | read | A project's end-user auth limits in force: code length, code expiry, wrong codes allowed, codes per email per hour, and password lockout… |
-| `nestcore_set_auth_security` | `authSecurity.set` | write | Change end-user auth limits (only the given ones). |
+| `nestcore_set_auth_security` | `authSecurity.set` | destructive (`confirm: true`) | Change end-user auth limits (only the given ones). |
 
 ### AI gateway — `ai` (4)
 

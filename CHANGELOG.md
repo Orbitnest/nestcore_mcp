@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.1.0 (2026-11-25)
+
+Security hardening of the tool modules (admin, auth, credits, integrations,
+rls, function, branches, background-jobs, logging, project-intelligence, smtp,
+analytics, dashboard, realtime).
+
+### Changed (may affect callers)
+
+- **`.` / `..` / empty identifiers are refused** in every API path segment
+  (`VALIDATION_ERROR`). Previously `functionName: ".."` could resolve
+  `DELETE /projects/<id>/functions/..` to the delete-project route.
+- **`nestcore_get_connection_string` masks the database password** (and the
+  password inside each URL) by default. Pass `revealPassword: true` to get it;
+  clients with elicitation ask the user first.
+- **Human confirmation (elicitation)** when the client supports it, for:
+  buy_credits, removing the credit cap, set_auth_security, reset_branch,
+  promote_branch with `apply: true`, create/update/delete_admin, disable_rls,
+  revealing the connection password, and delete_project. A declined prompt
+  returns the new `CANCELLED` error code. Without elicitation, behaviour falls
+  back to the tools' own confirm flags plus annotations.
+- In Code Mode, `set_auth_security` needs `confirm: true` (or the user prompt).
+- **Input bounds** on limits, ports, payload sizes, names, source code,
+  policy SQL, memory records, URLs (webhooks must be http/https) and phone
+  numbers; out-of-range values that used to pass are now rejected.
+
+### Added
+
+- Results that contain third-party text (logs, function/job source and logs,
+  project memory, analytics names, activity, webhooks, RLS policies, branch
+  diffs) carry a second content block marking the text as untrusted data, not
+  instructions; Code Mode `execute` results get an `untrusted` field instead.
+- Accurate tool annotations on every tool (`readOnlyHint`, `destructiveHint`,
+  `idempotentHint`, `openWorldHint`).
+- Secret redaction extended to SMTP, SMS (Twilio), webhook, admin and profile
+  results.
+
 ## 2.0.0 (2026-11-23)
 
 ### Breaking

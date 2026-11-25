@@ -4,13 +4,17 @@ import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
 import { guardRlsDisable } from '../safety/operation.guard.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+const TABLE = z.string().min(1).max(63);
+const POLICY = z.string().min(1).max(63);
 
 export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Get RLS Status ───
   server.registerTool('nestcore_get_rls_status', {
     description: 'Check if Row-Level Security is enabled on a specific table.',
-    inputSchema: { projectId: z.string().optional(), tableName: z.string() },
+    inputSchema: { projectId: z.string().optional(), tableName: TABLE },
   }, async ({ projectId, tableName }) => {
     try {
       await ctx.session.ensureAuthenticated();
@@ -27,7 +31,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   // ─── Enable RLS ───
   server.registerTool('nestcore_enable_rls', {
     description: 'Enable Row-Level Security on a table. This restricts access to rows based on policies.',
-    inputSchema: { projectId: z.string().optional(), tableName: z.string() },
+    inputSchema: { projectId: z.string().optional(), tableName: TABLE },
   }, async ({ projectId, tableName }) => {
     try {
       await ctx.session.ensureAuthenticated();
@@ -46,7 +50,7 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
     description: 'Disable Row-Level Security on a table. Cannot disable RLS on auth tables. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
-      tableName: z.string(),
+      tableName: TABLE,
       confirmDisable: z.boolean(),
     },
   }, async ({ projectId, tableName, confirmDisable }) => {
@@ -73,15 +77,13 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
   // ─── List Policies ───
   server.registerTool('nestcore_list_policies', {
     description: 'List all RLS policies for a specific table.',
-    inputSchema: { projectId: z.string().optional(), tableName: z.string() },
+    inputSchema: { projectId: z.string().optional(), tableName: TABLE },
   }, async ({ projectId, tableName }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.listPolicies(id, tableName);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'RLS policy names and SQL expressions written by workspace members');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -92,12 +94,12 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
     description: 'Create a new RLS policy on a table. Policies define row-level access rules for different operations and roles.',
     inputSchema: {
       projectId: z.string().optional(),
-      tableName: z.string(),
-      policyName: z.string(),
+      tableName: TABLE,
+      policyName: POLICY,
       command: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL']),
-      using: z.string(),
-      withCheck: z.string().optional(),
-      role: z.string().optional(),
+      using: z.string().min(1).max(10_000),
+      withCheck: z.string().max(10_000).optional(),
+      role: z.string().min(1).max(63).optional(),
     },
   }, async ({ projectId, tableName, policyName, command, using, withCheck, role }) => {
     try {
@@ -119,8 +121,8 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
     description: 'Delete an RLS policy from a table. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
-      tableName: z.string(),
-      policyName: z.string(),
+      tableName: TABLE,
+      policyName: POLICY,
       confirmDeletion: z.boolean(),
     },
   }, async ({ projectId, tableName, policyName, confirmDeletion }) => {

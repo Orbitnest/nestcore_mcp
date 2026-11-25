@@ -28,7 +28,7 @@ export function registerCreditTools(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('nestcore_set_credit_cap', {
     description:
-      "Set the workspace's monthly cap on AI credit spend in USD (0 to 100000), or pass null to remove the cap. " +
+      "Set the workspace's monthly cap on AI credit spend in USD (0 to 100000), or pass null to remove the cap (only on the user's request; clients that support it ask the user first). " +
       'Calls paid from credit fail with CREDITS_EXHAUSTED (reason spend_cap) once the month reaches it. Needs the workspace admin role. Returns the new summary.',
     inputSchema: {
       monthlyCapUsd: z.number().min(0).max(100_000).nullable().describe('USD per month, or null for no cap'),
@@ -47,7 +47,8 @@ export function registerCreditTools(server: McpServer, ctx: ToolContext): void {
       'Create a Stripe Checkout link for an AI credit pack (one-time payment) for a HUMAN to open and pay in a browser. ' +
       'This does NOT charge anything or add credit by itself: the credit lands only after the person pays and Stripe confirms. ' +
       'Never tell the user the purchase is done; give them the URL and check nestcore_get_credits afterwards. ' +
-      'Pack ids come from nestcore_get_credits (e.g. credits_5, credits_10, credits_25). Needs the workspace admin role.',
+      'Pack ids come from nestcore_get_credits (e.g. credits_5, credits_10, credits_25). Needs the workspace admin role. ' +
+      'Only when the user asked to buy credit; clients that support it ask the user first.',
     inputSchema: {
       pack: z.string().regex(/^[a-z0-9_-]{1,40}$/).describe('Credit pack id from nestcore_get_credits'),
     },

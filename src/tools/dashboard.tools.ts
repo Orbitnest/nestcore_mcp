@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
+import { untrustedResult } from '../utils/untrusted.js';
 
 export function registerDashboardTools(server: McpServer, ctx: ToolContext): void {
 
@@ -28,9 +29,7 @@ export function registerDashboardTools(server: McpServer, ctx: ToolContext): voi
     try {
       await ctx.session.ensureAuthenticated();
       const result = await ctx.apiClient.getDashboardActivity();
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'activity log entries (descriptions, names and emails entered by workspace members and end users)');
     } catch (error) {
       return formatErrorResponse(error);
     }

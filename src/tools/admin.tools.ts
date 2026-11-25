@@ -2,6 +2,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse, ValidationError } from '../utils/errors.js';
+import { redactSecrets } from '../utils/redact.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+const ADMIN_ID = z.string().min(1).max(128);
+const ADMIN_SOURCE = 'admin profiles (names and emails entered by workspace members)';
 
 export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
 
@@ -13,9 +18,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
     try {
       await ctx.session.ensureAuthenticated();
       const result = await ctx.apiClient.listAdmins();
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(redactSecrets(result), ADMIN_SOURCE);
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -24,14 +27,12 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   // ─── Get Admin ───
   server.registerTool('nestcore_get_admin', {
     description: 'Get details of a specific admin user.',
-    inputSchema: { adminId: z.string() },
+    inputSchema: { adminId: ADMIN_ID },
   }, async ({ adminId }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const result = await ctx.apiClient.getAdmin(adminId);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(redactSecrets(result), ADMIN_SOURCE);
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -45,7 +46,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool('nestcore_create_admin', {
     description: 'Invite a new admin by email (the platform adds admins via invitation, not direct password creation; requires SMTP configured). Requires confirmCreate=true.',
     inputSchema: {
-      email: z.string().email(),
+      email: z.string().email().max(320),
       confirmCreate: z.boolean(),
     },
   }, async ({ email, confirmCreate }) => {
@@ -77,9 +78,9 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
       'and signs out all of your sessions (including this one). isActive activates/deactivates another workspace member ' +
       'and needs the admin role. Requires confirmUpdate=true.',
     inputSchema: {
-      adminId: z.string(),
+      adminId: ADMIN_ID,
       fullName: z.string().min(1).max(100).optional(),
-      email: z.string().email().optional(),
+      email: z.string().email().max(320).optional(),
       currentPassword: z.string().max(128).optional().describe('Required when changing email'),
       isActive: z.boolean().optional(),
       confirmUpdate: z.boolean(),
@@ -108,7 +109,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
         result.active = await ctx.apiClient.setAdminActive(adminId, isActive);
       }
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);
@@ -118,7 +119,7 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   // ─── Delete Admin ───
   server.registerTool('nestcore_delete_admin', {
     description: 'Delete an admin user. Requires confirmation.',
-    inputSchema: { adminId: z.string(), confirmDeletion: z.boolean() },
+    inputSchema: { adminId: ADMIN_ID, confirmDeletion: z.boolean() },
   }, async ({ adminId, confirmDeletion }) => {
     try {
       await ctx.session.ensureAuthenticated();

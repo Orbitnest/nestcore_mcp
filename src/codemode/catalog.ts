@@ -134,7 +134,7 @@ const ROWS: Record<string, Row> = {
   nestcore_create_branch: ['branches', 'create', 'write'],
   nestcore_reset_branch: ['branches', 'reset', 'destructive'],
   nestcore_branch_changes: ['branches', 'changes', 'read'],
-  nestcore_promote_branch: ['branches', 'promote', 'write'],
+  nestcore_promote_branch: ['branches', 'promote', 'destructive'],
 
   // ── admins ────────────────────────────────────────────────────────────────
   nestcore_list_admins: ['admins', 'list', 'read'],
@@ -149,7 +149,7 @@ const ROWS: Record<string, Row> = {
 
   // ── authSecurity ──────────────────────────────────────────────────────────
   nestcore_get_auth_security: ['authSecurity', 'get', 'read'],
-  nestcore_set_auth_security: ['authSecurity', 'set', 'write'],
+  nestcore_set_auth_security: ['authSecurity', 'set', 'destructive'],
 
   // ── ai ────────────────────────────────────────────────────────────────────
   nestcore_get_ai_settings: ['ai', 'getSettings', 'read'],
@@ -228,6 +228,22 @@ export const SANDBOX_EXCLUDED = new Set(['nestcore_login']);
  * platform), so they stay available when writes are disabled.
  */
 export const LOCAL_SESSION_TOOLS = new Set(['nestcore_set_active_project']);
+
+/**
+ * Tools that reach outside NestCore (payments, email, SMS, outbound HTTP to
+ * user URLs, realtime fan-out to app clients, the user's browser). Annotated
+ * `openWorldHint: true` so clients can treat them with extra care.
+ */
+export const OPEN_WORLD_TOOLS: ReadonlySet<string> = new Set([
+  'nestcore_login',
+  'nestcore_buy_credits',
+  'nestcore_create_admin',
+  'nestcore_create_webhook',
+  'nestcore_test_webhook',
+  'nestcore_test_sms',
+  'nestcore_broadcast',
+  'nestcore_request_verification',
+]);
 
 /**
  * Extra search words for tools whose name/description does not contain the

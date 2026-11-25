@@ -3,6 +3,12 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+// Bounds for tool inputs (the API enforces its own limits too).
+const NAME = z.string().min(1).max(128);
+const SOURCE = z.string().min(1).max(1_000_000);
+const DESCRIPTION = z.string().max(1000);
 
 const TIMEOUT_MAP: Record<string, number> = {
   '10s': 10_000,
@@ -41,9 +47,9 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
     description: 'Create a new edge function. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug — passing the slug causes a silent 500 error. Edge function code format: JavaScript or TypeScript (TS is transpiled), no `import` statements, use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
     inputSchema: {
       projectId: z.string().optional(),
-      name: z.string().min(1),
-      description: z.string().optional(),
-      sourceCode: z.string().min(1),
+      name: NAME,
+      description: DESCRIPTION.optional(),
+      sourceCode: SOURCE,
       timeout: z.enum(['10s', '30s', '60s', '120s']).optional().describe('Max execution time. Allowed: 10s, 30s (default), 60s, 120s.'),
     },
   }, async ({ projectId, name, description, sourceCode, timeout }) => {
@@ -80,15 +86,13 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
   // ─── Get Function ───
   server.registerTool('nestcore_get_function', {
     description: 'Get details of a specific edge function including its source code.',
-    inputSchema: { projectId: z.string().optional(), functionName: z.string() },
+    inputSchema: { projectId: z.string().optional(), functionName: NAME },
   }, async ({ projectId, functionName }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getFunction(id, functionName);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'edge function source code and description written by workspace members');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -99,9 +103,9 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
     description: 'Update an edge function\'s source code, description, or timeout. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug. Edge function code format: JavaScript or TypeScript (TS is transpiled), no `import` statements, use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
     inputSchema: {
       projectId: z.string().optional(),
-      functionName: z.string(),
-      sourceCode: z.string().optional(),
-      description: z.string().optional(),
+      functionName: NAME,
+      sourceCode: SOURCE.optional(),
+      description: DESCRIPTION.optional(),
       timeout: z.enum(['10s', '30s', '60s', '120s']).optional().describe('Max execution time. Allowed: 10s, 30s, 60s, 120s.'),
     },
   }, async ({ projectId, functionName, sourceCode, description, timeout }) => {
@@ -124,7 +128,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
     description: 'Delete an edge function. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
-      functionName: z.string(),
+      functionName: NAME,
       confirmDeletion: z.boolean(),
     },
   }, async ({ projectId, functionName, confirmDeletion }) => {
@@ -152,17 +156,15 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
     description: 'Retrieve the most recent execution logs for a specific edge function (use nestcore_query_logs with logType=edge-functions for time-range filtering).',
     inputSchema: {
       projectId: z.string().optional(),
-      functionName: z.string(),
-      limit: z.number().optional(),
+      functionName: NAME,
+      limit: z.number().int().min(1).max(1000).optional(),
     },
   }, async ({ projectId, functionName, limit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getFunctionLogs(id, functionName, { limit });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'edge function console output and errors (from function code and request data)');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -189,8 +191,8 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
     description: 'Create a new environment variable for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      key: z.string().min(1),
-      value: z.string(),
+      key: z.string().min(1).max(256),
+      value: z.string().max(65_536),
       encrypted: z.boolean().optional(),
     },
   }, async ({ projectId, key, value, encrypted }) => {
@@ -210,8 +212,8 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
     description: 'Update an existing environment variable. Pass the variable\'s name (e.g. STRIPE_SECRET_KEY), not its ID. The API accepts only { value } in the request body — renaming a variable is not supported.',
     inputSchema: {
       projectId: z.string().optional(),
-      variableName: z.string().describe('The variable name (e.g. STRIPE_SECRET_KEY), not its UUID.'),
-      value: z.string(),
+      variableName: z.string().min(1).max(256).describe('The variable name (e.g. STRIPE_SECRET_KEY), not its UUID.'),
+      value: z.string().max(65_536),
     },
   }, async ({ projectId, variableName, value }) => {
     try {
@@ -228,7 +230,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   server.registerTool('nestcore_delete_env_variable', {
     description: 'Delete an environment variable. Pass the variable\'s name (e.g. STRIPE_SECRET_KEY), not its ID.',
-    inputSchema: { projectId: z.string().optional(), variableName: z.string().describe('The variable name (e.g. STRIPE_SECRET_KEY), not its UUID.') },
+    inputSchema: { projectId: z.string().optional(), variableName: z.string().min(1).max(256).describe('The variable name (e.g. STRIPE_SECRET_KEY), not its UUID.') },
   }, async ({ projectId, variableName }) => {
     try {
       await ctx.session.ensureAuthenticated();

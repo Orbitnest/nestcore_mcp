@@ -35,9 +35,9 @@ export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void
       'or _realtime_* tables. Pass `columns` to restrict which columns appear in the payload.',
     inputSchema: {
       projectId: z.string().optional(),
-      table: z.string().describe('Table name (without schema prefix)'),
-      schema: z.string().optional().describe("Postgres schema (default 'public')"),
-      columns: z.array(z.string()).optional().describe('Allowlist of columns to include; empty = all'),
+      table: z.string().min(1).max(63).describe('Table name (without schema prefix)'),
+      schema: z.string().min(1).max(63).optional().describe("Postgres schema (default 'public')"),
+      columns: z.array(z.string().min(1).max(63)).max(200).optional().describe('Allowlist of columns to include; empty = all'),
     },
   }, async ({ projectId, table, schema, columns }) => {
     try {
@@ -59,8 +59,8 @@ export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void
       'subscription record. Existing subscribers will stop receiving events for this table.',
     inputSchema: {
       projectId: z.string().optional(),
-      schema: z.string().describe("Postgres schema (e.g. 'public')"),
-      table: z.string().describe('Table name'),
+      schema: z.string().min(1).max(63).describe("Postgres schema (e.g. 'public')"),
+      table: z.string().min(1).max(63).describe('Table name'),
     },
   }, async ({ projectId, schema, table }) => {
     try {
@@ -83,9 +83,11 @@ export function registerRealtimeTools(server: McpServer, ctx: ToolContext): void
       'automatically if missing. `payload` can be any JSON value.',
     inputSchema: {
       projectId: z.string().optional(),
-      channel: z.string().describe("Channel name (e.g. 'notifications' or 'broadcast:notifications')"),
-      event: z.string().describe("Event name (e.g. 'new-alert')"),
-      payload: z.unknown().describe('JSON payload to send to subscribers'),
+      channel: z.string().min(1).max(200).describe("Channel name (e.g. 'notifications' or 'broadcast:notifications')"),
+      event: z.string().min(1).max(200).describe("Event name (e.g. 'new-alert')"),
+      payload: z.unknown()
+        .refine((v) => { try { return JSON.stringify(v ?? null).length <= 65_536; } catch { return false; } }, 'payload must be JSON of at most 64 KB')
+        .describe('JSON payload to send to subscribers (at most 64 KB)'),
     },
   }, async ({ projectId, channel, event, payload }) => {
     try {

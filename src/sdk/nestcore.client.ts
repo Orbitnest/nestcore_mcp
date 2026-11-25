@@ -376,7 +376,7 @@ export class NestCoreClient {
    * `/projects/:id/branches` (e.g. `/development/promote`).
    */
   async branches<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'DELETE', projectId: string, sub = '', body?: unknown): Promise<T> {
-    const res = await this.request<{ data?: T } & Record<string, unknown>>(method, `/projects/${encodeURIComponent(projectId)}/branches${sub}`, body);
+    const res = await this.request<{ data?: T } & Record<string, unknown>>(method, `/projects/${EP.pathSegment(projectId)}/branches${sub}`, body);
     return (res && 'data' in res ? res.data : res) as T;
   }
 

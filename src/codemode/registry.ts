@@ -3,7 +3,9 @@ import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import type { ZodRawShape } from 'zod';
 import { logger } from '../utils/logger.js';
 import { analyzeSql } from '../safety/sql.guard.js';
-import { DYNAMIC_SQL_TOOL, TOOL_CATALOG, type ToolClass } from './catalog.js';
+import { DYNAMIC_SQL_TOOL, OPEN_WORLD_TOOLS, TOOL_CATALOG, type ToolClass } from './catalog.js';
+import { askUserToConfirm, clientSupportsElicitation, userConfirmationFor } from '../safety/confirmation.js';
+import { formatErrorResponse, McpError } from '../utils/errors.js';
 
 /** What a tool handler returns (the SDK's CallToolResult, loosely typed). */
 export interface ToolResult {
@@ -108,33 +110,54 @@ export function classifyCall(entry: Pick<ToolEntry, 'name' | 'cls'>, args: unkno
 }
 
 const IDEMPOTENT_VERB = /^nestcore_(get|list|update|set|enable|disable|delete|toggle)_/;
+const IDEMPOTENT_DESTRUCTIVE_VERB = /^nestcore_(delete|set|disable|revoke)_/;
 
 /** MCP tool annotations derived from the class table. */
 export function annotationsFor(name: string, cls: ToolClass): ToolAnnotations {
+  const openWorldHint = OPEN_WORLD_TOOLS.has(name);
   if (name === DYNAMIC_SQL_TOOL) {
-    return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+    return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint };
   }
   switch (cls) {
     case 'read':
-      return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+      return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint };
     case 'destructive':
       return {
         readOnlyHint: false,
         destructiveHint: true,
-        idempotentHint: /^nestcore_delete_/.test(name),
-        openWorldHint: false,
+        idempotentHint: IDEMPOTENT_DESTRUCTIVE_VERB.test(name),
+        openWorldHint,
       };
     case 'write':
       return {
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: IDEMPOTENT_VERB.test(name) && !/^nestcore_toggle_/.test(name),
-        openWorldHint: false,
+        openWorldHint,
       };
     case 'session':
     default:
-      return { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+      return { readOnlyHint: false, destructiveHint: false, openWorldHint };
   }
+}
+
+/**
+ * Wrap a direct tool's handler so the highest-risk calls (see
+ * safety/confirmation.ts) ask the human through MCP elicitation when the
+ * client supports it. Without elicitation support the handler runs as before
+ * (its own confirm flags + the tool annotations apply).
+ */
+export function withUserConfirmation(server: McpServer, name: string, handler: ToolHandler): ToolHandler {
+  return async (args, extra) => {
+    const what = userConfirmationFor(name, args as Record<string, unknown>);
+    if (what && clientSupportsElicitation(server)) {
+      const allowed = await askUserToConfirm(server, `Allow the AI to ${what}? (${name})`, `Run ${name}`);
+      if (!allowed) {
+        return formatErrorResponse(new McpError(`${name} was cancelled by user (not confirmed).`, 'CANCELLED'));
+      }
+    }
+    return handler(args, extra);
+  };
 }
 
 interface RegisterConfig {
@@ -163,7 +186,7 @@ export function recordingServer(
           return target.registerTool(
             name,
             { ...config, annotations: { ...annotationsFor(name, entry.cls), ...(config.annotations ?? {}) } } as never,
-            handler as never,
+            withUserConfirmation(target, name, handler) as never,
           );
         };
       }

@@ -3,8 +3,10 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { maskConnectionSecrets, redactSecrets } from '../utils/redact.js';
+import { untrustedResult } from '../utils/untrusted.js';
 
-const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
+const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(data), null, 2) }] });
 
 // Extensions an agent may enable on demand (avoids arbitrary CREATE EXTENSION).
 const ALLOWED_EXTENSIONS = new Set(['vector', 'pg_trgm', 'citext', 'unaccent', 'uuid-ossp']);
@@ -13,13 +15,28 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   const pid = (projectId?: string) => requireProjectId(projectId, ctx.session.getSession().currentProjectId);
 
   // ─── Direct connection string ───
+  // The API returns the live database password (in `password` and inside each
+  // connection URL). It is masked unless the caller opts in with revealPassword,
+  // and it is never logged.
   server.registerTool('nestcore_get_connection_string', {
-    description: 'Get the direct Postgres connection string for a project (only when the deployment has direct connections enabled).',
-    inputSchema: { projectId: z.string().optional() },
-  }, async ({ projectId }) => {
+    description:
+      'Get the direct Postgres connection details for a project (only when the deployment has direct connections enabled). ' +
+      'The password is MASKED by default (host, port, database, user and URL shape are real). Pass revealPassword: true only when ' +
+      'the user explicitly asked to see the credentials; clients that support it ask the user first.',
+    inputSchema: {
+      projectId: z.string().optional(),
+      revealPassword: z.boolean().optional().describe('Return the real password (default false = masked). Only on an explicit request from the user.'),
+    },
+  }, async ({ projectId, revealPassword }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      return json(await ctx.apiClient.getConnectionString(pid(projectId)));
+      const info = await ctx.apiClient.getConnectionString(pid(projectId));
+      if (revealPassword === true) return json(info);
+      return json({
+        ...maskConnectionSecrets(info),
+        password_masked: true,
+        note: 'The password is masked. Ask the user to copy it from Studio (Connect → Postgres), or call again with revealPassword: true if they explicitly want it here.',
+      });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -39,7 +56,9 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   });
 
   server.registerTool('nestcore_set_auth_security', {
-    description: 'Change end-user auth limits (only the given ones). Applies to every app signing in to the project within 30 seconds. Needs the workspace admin role.',
+    description:
+      'Change end-user auth limits (only the given ones). Applies to every app signing in to the project within 30 seconds; looser limits weaken ' +
+      'brute-force protection for all end users. Only on an explicit request from the user. Needs the workspace admin role.',
     inputSchema: {
       projectId: z.string().optional(),
       codeLength: z.number().int().min(6).max(8).optional().describe('Digits in emailed codes'),
@@ -128,7 +147,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   }, async ({ projectId, type }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      return json(await ctx.apiClient.listMemorySubjects(pid(projectId), type));
+      return untrustedResult(redactSecrets(await ctx.apiClient.listMemorySubjects(pid(projectId), type)), 'AI memory subject ids set by app code / end users');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -155,13 +174,16 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     inputSchema: {
       projectId: z.string().optional(),
       limit: z.number().int().min(1).max(500).optional().describe('Default 50'),
-      offset: z.number().int().min(0).optional(),
+      offset: z.number().int().min(0).max(1_000_000).optional(),
       status: z.enum(['ok', 'error']).optional(),
     },
   }, async ({ projectId, limit, offset, status }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      return json(await ctx.apiClient.getAiTraces(pid(projectId), { limit: limit ?? 50, offset, status }));
+      return untrustedResult(
+        redactSecrets(await ctx.apiClient.getAiTraces(pid(projectId), { limit: limit ?? 50, offset, status })),
+        'AI call traces (callers, error messages from providers and app code)',
+      );
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -175,8 +197,8 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
       'ai_* and auth_* tables are refused. Apps then query it with semantic(). Needs the workspace admin role. Requires confirmEnable=true.',
     inputSchema: {
       projectId: z.string().optional(),
-      table: z.string().max(63),
-      sourceColumns: z.array(z.string().max(63)).min(1).max(10).describe('Text columns joined (in order) into the embedded text'),
+      table: z.string().min(1).max(63),
+      sourceColumns: z.array(z.string().min(1).max(63)).min(1).max(10).describe('Text columns joined (in order) into the embedded text'),
       targetColumn: z.string().max(50).optional().describe('Vector column name; defaults to <first source>_embedding'),
       model: z.string().max(200).optional().describe("Embedding model; defaults to the provider's default embedding model"),
       confirmEnable: z.boolean(),
@@ -203,20 +225,22 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   }, async ({ projectId }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      return json(await ctx.apiClient.listWebhooks(pid(projectId)));
+      return untrustedResult(redactSecrets(await ctx.apiClient.listWebhooks(pid(projectId))), 'webhook names and URLs set by workspace members');
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
   server.registerTool('nestcore_create_webhook', {
-    description: 'Create a database webhook (signed HTTP POST on row INSERT/UPDATE/DELETE). Returns the signing secret once.',
+    description:
+      'Create a database webhook (signed HTTP POST on row INSERT/UPDATE/DELETE to an external URL). Returns the signing secret once: ' +
+      'hand it to the user to store, do not repeat it elsewhere.',
     inputSchema: {
       projectId: z.string().optional(),
-      name: z.string(),
-      url: z.string().url(),
-      events: z.array(z.enum(['INSERT', 'UPDATE', 'DELETE'])).optional(),
-      table_name: z.string().optional(),
+      name: z.string().min(1).max(100),
+      url: z.string().url().max(2048).refine((u) => /^https?:\/\//i.test(u), 'url must be http(s)'),
+      events: z.array(z.enum(['INSERT', 'UPDATE', 'DELETE'])).max(3).optional(),
+      table_name: z.string().min(1).max(63).optional(),
     },
   }, async ({ projectId, name, url, events, table_name }) => {
     try {
@@ -229,7 +253,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
 
   server.registerTool('nestcore_delete_webhook', {
     description: 'Delete a database webhook by id.',
-    inputSchema: { projectId: z.string().optional(), webhookId: z.string() },
+    inputSchema: { projectId: z.string().optional(), webhookId: z.string().min(1).max(128) },
   }, async ({ projectId, webhookId }) => {
     try {
       await ctx.session.ensureAuthenticated();
@@ -241,7 +265,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
 
   server.registerTool('nestcore_test_webhook', {
     description: 'Send a sample ping event to a webhook to verify the endpoint.',
-    inputSchema: { projectId: z.string().optional(), webhookId: z.string() },
+    inputSchema: { projectId: z.string().optional(), webhookId: z.string().min(1).max(128) },
   }, async ({ projectId, webhookId }) => {
     try {
       await ctx.session.ensureAuthenticated();
@@ -268,9 +292,9 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
     description: "Create or update a project's Twilio SMS settings (auth token stored encrypted).",
     inputSchema: {
       projectId: z.string().optional(),
-      account_sid: z.string().optional(),
-      auth_token: z.string().optional(),
-      from_number: z.string().optional(),
+      account_sid: z.string().max(64).optional(),
+      auth_token: z.string().max(256).optional(),
+      from_number: z.string().max(32).optional(),
       is_enabled: z.boolean().optional(),
     },
   }, async ({ projectId, account_sid, auth_token, from_number, is_enabled }) => {
@@ -284,7 +308,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
 
   server.registerTool('nestcore_test_sms', {
     description: 'Send a test SMS to verify the Twilio configuration.',
-    inputSchema: { projectId: z.string().optional(), to: z.string() },
+    inputSchema: { projectId: z.string().optional(), to: z.string().regex(/^\+?[0-9 ()-]{6,24}$/, 'to must be a phone number, e.g. +15551234567') },
   }, async ({ projectId, to }) => {
     try {
       await ctx.session.ensureAuthenticated();
@@ -297,7 +321,7 @@ export function registerIntegrationTools(server: McpServer, ctx: ToolContext): v
   // ─── Enable a Postgres extension (e.g. pgvector) ───
   server.registerTool('nestcore_enable_extension', {
     description: 'Enable a Postgres extension on a project (e.g. "vector" for pgvector semantic search). Allowed: vector, pg_trgm, citext, unaccent, uuid-ossp.',
-    inputSchema: { projectId: z.string().optional(), name: z.string() },
+    inputSchema: { projectId: z.string().optional(), name: z.string().min(1).max(64) },
   }, async ({ projectId, name }) => {
     try {
       await ctx.session.ensureAuthenticated();

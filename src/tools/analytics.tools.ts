@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { untrustedResult } from '../utils/untrusted.js';
 
 export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): void {
 
@@ -11,11 +12,11 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get high-level analytics metrics for a project including events, sessions, DAU, and crashes.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
       granularity: z.enum(['hour', 'day', 'week', 'month']).optional(),
-      platform: z.string().optional().describe('Filter by platform (e.g. ios, android, web)'),
-      appVersion: z.string().optional().describe('Filter by app version'),
+      platform: z.string().max(50).optional().describe('Filter by platform (e.g. ios, android, web)'),
+      appVersion: z.string().max(50).optional().describe('Filter by app version'),
     },
   }, async ({ projectId, from, to, granularity, platform, appVersion }) => {
     try {
@@ -37,11 +38,11 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get event counts as a timeseries for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
       granularity: z.enum(['hour', 'day', 'week', 'month']).optional(),
-      platform: z.string().optional(),
-      appVersion: z.string().optional(),
+      platform: z.string().max(50).optional(),
+      appVersion: z.string().max(50).optional(),
     },
   }, async ({ projectId, from, to, granularity, platform, appVersion }) => {
     try {
@@ -63,18 +64,16 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get the top events by occurrence count for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
-      limit: z.number().optional().describe('Maximum number of events to return'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
+      limit: z.number().int().min(1).max(1000).optional().describe('Maximum number of events to return'),
     },
   }, async ({ projectId, from, to, limit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getTopAnalyticsEvents(id, { from, to, limit });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'analytics event names sent by app clients (end-user devices)');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -85,18 +84,16 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get the top screens or pages by view count for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
-      limit: z.number().optional().describe('Maximum number of screens to return'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
+      limit: z.number().int().min(1).max(1000).optional().describe('Maximum number of screens to return'),
     },
   }, async ({ projectId, from, to, limit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getTopAnalyticsScreens(id, { from, to, limit });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'analytics screen names sent by app clients (end-user devices)');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -107,8 +104,8 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get day-N rolling retention data for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
       granularity: z.enum(['hour', 'day', 'week', 'month']).optional(),
     },
   }, async ({ projectId, from, to, granularity }) => {
@@ -129,9 +126,9 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Run a funnel analysis across a sequence of event names for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      steps: z.array(z.string()).min(2).describe('Ordered list of event names that form the funnel'),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
+      steps: z.array(z.string().min(1).max(200)).min(2).max(20).describe('Ordered list of event names that form the funnel'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
     },
   }, async ({ projectId, steps, from, to }) => {
     try {
@@ -151,11 +148,11 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get performance metric percentiles (e.g. load time, response time) for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
       granularity: z.enum(['hour', 'day', 'week', 'month']).optional(),
-      platform: z.string().optional(),
-      appVersion: z.string().optional(),
+      platform: z.string().max(50).optional(),
+      appVersion: z.string().max(50).optional(),
     },
   }, async ({ projectId, from, to, granularity, platform, appVersion }) => {
     try {
@@ -177,11 +174,11 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Get crash groups and crash rate data for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      from: z.string().optional().describe('Start date (ISO 8601)'),
-      to: z.string().optional().describe('End date (ISO 8601)'),
+      from: z.string().max(40).optional().describe('Start date (ISO 8601)'),
+      to: z.string().max(40).optional().describe('End date (ISO 8601)'),
       granularity: z.enum(['hour', 'day', 'week', 'month']).optional(),
-      platform: z.string().optional(),
-      appVersion: z.string().optional(),
+      platform: z.string().max(50).optional(),
+      appVersion: z.string().max(50).optional(),
     },
   }, async ({ projectId, from, to, granularity, platform, appVersion }) => {
     try {
@@ -190,9 +187,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
       const result = await ctx.apiClient.getAnalyticsCrashes(id, {
         from, to, granularity, platform, app_version: appVersion,
       });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'crash reports (messages and stack traces sent by app clients / end-user devices)');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -203,7 +198,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Create an analytics ingestion token for a project.',
     inputSchema: {
       projectId: z.string().optional(),
-      name: z.string().optional().describe('Human-readable label for the token'),
+      name: z.string().max(100).optional().describe('Human-readable label for the token'),
     },
   }, async ({ projectId, name }) => {
     try {
@@ -242,7 +237,7 @@ export function registerAnalyticsTools(server: McpServer, ctx: ToolContext): voi
     description: 'Revoke (delete) an analytics ingestion token. Requires confirmation.',
     inputSchema: {
       projectId: z.string().optional(),
-      tokenId: z.string().describe('ID of the token to revoke'),
+      tokenId: z.string().min(1).max(128).describe('ID of the token to revoke'),
       confirmRevocation: z.boolean().describe('Must be true to proceed with revocation'),
     },
   }, async ({ projectId, tokenId, confirmRevocation }) => {

@@ -3,6 +3,9 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+const CHANGES_SOURCE = 'recorded schema changes (SQL statements written by workspace members, the CLI or AI agents)';
 
 const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -76,7 +79,7 @@ export function registerBranchTools(server: McpServer, ctx: ToolContext): void {
   }, async ({ projectId }) => {
     try {
       await ctx.session.ensureAuthenticated();
-      return json(await ctx.apiClient.branches('GET', projectOf(projectId), '/development/changes'));
+      return untrustedResult(await ctx.apiClient.branches('GET', projectOf(projectId), '/development/changes'), CHANGES_SOURCE);
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -88,11 +91,12 @@ export function registerBranchTools(server: McpServer, ctx: ToolContext): void {
       'Production, auth-setting differences, and whether Production drifted). With apply: true (workspace admins) the schema changes run on Production in ONE ' +
       'transaction (any failure rolls all back), then functions, new buckets and new jobs (created disabled) are copied. Env vars and auth settings are only ' +
       'copied when asked. Production data is never touched. ALWAYS show the preview to the user and get their explicit go-ahead before apply: true; ' +
-      'destructive changes also need confirmDestructive and drift needs acknowledgeDrift, both only with the user\'s say-so.',
+      'destructive changes also need confirmDestructive and drift needs acknowledgeDrift, both only with the user\'s say-so. ' +
+      'Clients that support it ask the user before apply: true runs.',
     inputSchema: {
       projectId: z.string().optional(),
       apply: z.boolean().optional().describe('false/omitted = preview only'),
-      changeIds: z.array(z.string()).optional().describe('Subset of pending change ids (default: all)'),
+      changeIds: z.array(z.string().min(1).max(128)).max(1000).optional().describe('Subset of pending change ids (default: all)'),
       includeEnvVars: z.boolean().optional().describe('Also add env vars missing on Production (Development values)'),
       includeAuthSettings: z.boolean().optional().describe("Replace Production's auth settings with Development's"),
       confirmDestructive: z.boolean().optional(),
@@ -103,7 +107,7 @@ export function registerBranchTools(server: McpServer, ctx: ToolContext): void {
       await ctx.session.ensureAuthenticated();
       const id = projectOf(projectId);
       const preview = await ctx.apiClient.branches<any>('GET', id, '/development/promote');
-      if (!apply) return json({ preview: true, ...preview });
+      if (!apply) return untrustedResult({ preview: true, ...preview }, CHANGES_SOURCE);
       const cfg = preview.config ?? {};
       const result = await ctx.apiClient.branches<any>('POST', id, '/development/promote', {
         change_ids: changeIds ?? (preview.changes ?? []).map((c: { id: string }) => c.id),

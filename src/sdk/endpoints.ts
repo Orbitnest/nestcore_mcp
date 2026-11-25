@@ -1,10 +1,25 @@
+import { ValidationError } from '../utils/errors.js';
+
 // MEDIUM-02: URL-encode every interpolated path segment so a tool input
 // containing "/", "..", "?", or "#" (e.g. filePath = "../../admin/admins/<id>")
 // can't reshape the request path, smuggle query params, or escape the project
 // scope under the admin bearer token. This file only builds paths (query
 // strings are assembled separately via URLSearchParams), so encoding all
 // segments is correct.
-const e = (v: string | number): string => encodeURIComponent(String(v));
+//
+// encodeURIComponent leaves "." untouched, and the WHATWG URL parser (fetch)
+// resolves a "." / ".." segment, so `functionName: ".."` would turn
+// DELETE /projects/<id>/functions/.. into DELETE /projects/<id>/ (the project).
+// Empty, "." and ".." identifiers are therefore refused outright (encoding them
+// as %2E does not help: the parser treats %2e as a dot too).
+export function pathSegment(v: string | number): string {
+  const s = String(v);
+  if (s === '' || s === '.' || s === '..') {
+    throw new ValidationError(`Invalid identifier ${JSON.stringify(s)}: empty, "." and ".." are not allowed in an API path.`);
+  }
+  return encodeURIComponent(s);
+}
+const e = pathSegment;
 
 // Encode a multi-segment file path: preserve legitimate "/" separators (nested
 // folders) but reject any "." / ".." traversal segment and percent-encode the

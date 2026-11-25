@@ -4,6 +4,11 @@ import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { clearCredentials } from '../auth/credentials.service.js';
 import { loginWithOAuth } from '../auth/oauth-login.js';
+import { redactSecrets } from '../utils/redact.js';
+
+const EMAIL = z.string().email().max(320);
+const PASSWORD = z.string().max(1024);
+const FULL_NAME = z.string().min(1).max(100);
 
 export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
@@ -14,9 +19,9 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
       'If the account has two-factor (TOTP) enabled, call again with the same email/password plus `mfa_code` ' +
       'set to a 6-digit authenticator code (or a recovery code).',
     inputSchema: {
-      email: z.string().email(),
-      password: z.string().min(1),
-      mfa_code: z.string().optional().describe('6-digit authenticator code or a recovery code (only if 2FA is enabled)'),
+      email: EMAIL,
+      password: PASSWORD.min(1),
+      mfa_code: z.string().min(4).max(64).optional().describe('6-digit authenticator code or a recovery code (only if 2FA is enabled)'),
     },
   }, async ({ email, password, mfa_code }) => {
     try {
@@ -74,7 +79,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   // ─── Admin Sign Up (direct) ───
   server.registerTool('nestcore_admin_signup', {
     description: 'Create a new NestCore admin account directly. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
-    inputSchema: { email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1).max(100) },
+    inputSchema: { email: EMAIL, password: PASSWORD.min(8), fullName: FULL_NAME },
   }, async ({ email, password, fullName }) => {
     try {
       const result = await ctx.apiClient.signup(email, password, fullName);
@@ -100,9 +105,9 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool('nestcore_admin_signup_verified', {
     description: 'Complete admin signup with the 4-digit email verification code. First call nestcore_request_verification (same email, password and fullName) to get the code.',
     inputSchema: {
-      email: z.string().email(),
-      password: z.string().min(8),
-      fullName: z.string().min(1).max(100),
+      email: EMAIL,
+      password: PASSWORD.min(8),
+      fullName: FULL_NAME,
       verificationCode: z.string().regex(/^\d{4}$/, 'The verification code is 4 digits'),
     },
   }, async ({ email, password, fullName, verificationCode }) => {
@@ -126,7 +131,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
   // ─── Request Verification Code ───
   server.registerTool('nestcore_request_verification', {
     description: 'Request an email verification code for admin signup. Password: 8+ chars with upper, lower, digit and one of @$!%*?&.',
-    inputSchema: { email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1).max(100) },
+    inputSchema: { email: EMAIL, password: PASSWORD.min(8), fullName: FULL_NAME },
   }, async ({ email, password, fullName }) => {
     try {
       const result = await ctx.apiClient.requestVerification(email, password, fullName);
@@ -199,7 +204,7 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
       await ctx.session.ensureAuthenticated();
       const result = await ctx.apiClient.getProfile();
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(redactSecrets(result), null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);

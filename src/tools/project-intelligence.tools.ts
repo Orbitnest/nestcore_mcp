@@ -3,6 +3,11 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+// Project memory is written by every workspace member and by AI agents (and
+// shown again to every future session), so reads are marked untrusted.
+const MEMORY_SOURCE = 'project memory (tasks, decisions, features, events, digests and summaries written by workspace members and AI agents)';
 
 // ── Structured content schemas ────────────────────────────────────────────────
 // The AI sends STRUCTURED data (not a text blob). We serialize to JSON and store
@@ -78,18 +83,16 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const result = await ctx.apiClient.getProjectContext(pid, {
         view: 'ai', detail, includeSchema, events: eventLimit,
       });
-      return {
-        content: [{
-          type: 'text' as const,
-          text: [
-            JSON.stringify(result),
-            '',
-            '─── NEXT STEPS ───',
-            '• Review open tasks and the latest digest.',
-            '• At session end, call nestcore_sync_memory to save your work.',
-          ].join('\n'),
-        }],
-      };
+      return untrustedResult(JSON.stringify(result), MEMORY_SOURCE, {
+        raw: true,
+        suffix: [
+          '',
+          '',
+          '─── NEXT STEPS ───',
+          '• Review open tasks and the latest digest.',
+          '• At session end, call nestcore_sync_memory to save your work.',
+        ].join('\n'),
+      });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -128,16 +131,16 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       decisions: z.array(z.object({
         decision: z.string().min(3).max(500).describe('The decision, in one sentence'),
         reason:   z.string().max(2000).optional().describe('Why this decision was made'),
-      })).optional().describe('Decisions made this session not yet written via nestcore_add_decision'),
+      })).max(100).optional().describe('Decisions made this session not yet written via nestcore_add_decision'),
       tasks: z.array(z.object({
         title:    z.string().min(3).max(200),
         detail:   z.string().max(2000).optional(),
         priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
-      })).optional().describe('Follow-up tasks identified this session not yet written via nestcore_add_task'),
+      })).max(100).optional().describe('Follow-up tasks identified this session not yet written via nestcore_add_task'),
       events: z.array(z.object({
         type:    z.enum(EVENT_TYPES),
         summary: z.string().min(3).max(500),
-      })).optional().describe('Notable events not yet written via nestcore_add_event'),
+      })).max(100).optional().describe('Notable events not yet written via nestcore_add_event'),
     },
   }, async ({ projectId, digest, decisions, tasks, events }) => {
     try {
@@ -196,7 +199,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'Use to catch up on what changed since your last session, or to see what happened while you were away.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      since: z.string().optional().describe('ISO 8601 timestamp — only return events after this point'),
+      since: z.string().max(40).optional().describe('ISO 8601 timestamp — only return events after this point'),
       limit:  z.number().int().min(1).max(100).optional(),
     },
   }, async ({ projectId, since, limit }) => {
@@ -204,7 +207,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getRecentChanges(pid, { since, limit });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return untrustedResult(result, MEMORY_SOURCE, { pretty: false });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -222,7 +225,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getOpenTasks(pid, { priority });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return untrustedResult(result, MEMORY_SOURCE, { pretty: false });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -290,7 +293,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getProjectDecisions(pid, { status, limit });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return untrustedResult(result, MEMORY_SOURCE, { pretty: false });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -306,7 +309,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       projectId: z.string().uuid().optional(),
       decision:  z.string().min(3).max(500).describe('The decision, in one sentence'),
       reason:    z.string().max(2000).optional().describe('Why this decision was made'),
-      metadata:  z.record(z.unknown()).optional(),
+      metadata:  z.record(z.unknown()).refine((m) => Object.keys(m).length <= 50, 'metadata: at most 50 keys').optional(),
     },
   }, async ({ projectId, decision, reason, metadata }) => {
     try {
@@ -330,7 +333,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       name:         z.string().min(2).max(200),
       description:  z.string().max(2000).optional(),
       status:       z.enum(['planned', 'in_progress', 'released', 'cancelled']).optional(),
-      dependencies: z.array(z.string()).optional(),
+      dependencies: z.array(z.string().max(200)).max(50).optional(),
     },
   }, async ({ projectId, name, description, status, dependencies }) => {
     try {
@@ -376,7 +379,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       projectId: z.string().uuid().optional(),
       type:      z.enum(EVENT_TYPES),
       summary:   z.string().min(3).max(500),
-      metadata:  z.record(z.unknown()).optional(),
+      metadata:  z.record(z.unknown()).refine((m) => Object.keys(m).length <= 50, 'metadata: at most 50 keys').optional(),
     },
   }, async ({ projectId, type, summary, metadata }) => {
     try {
@@ -409,7 +412,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.searchProjectMemory(pid, { query, sourceType, limit });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return untrustedResult(result, MEMORY_SOURCE, { pretty: false });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -430,8 +433,8 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     inputSchema: {
       projectId:   z.string().uuid().optional(),
       summary:     projectSummarySchema.optional().describe('STRUCTURED project summary: { description, tagline?, highlights: [...] }'),
-      stack:       z.array(z.string()).optional().describe('Tech stack (e.g. ["NestJS", "Next.js", "Postgres"])'),
-      conventions: z.record(z.unknown()).optional().describe('Key conventions (e.g. { auth: "JWT", style: "snake_case" })'),
+      stack:       z.array(z.string().max(100)).max(50).optional().describe('Tech stack (e.g. ["NestJS", "Next.js", "Postgres"])'),
+      conventions: z.record(z.unknown()).refine((m) => Object.keys(m).length <= 50, 'conventions: at most 50 keys').optional().describe('Key conventions (e.g. { auth: "JWT", style: "snake_case" })'),
       digest:      sessionDigestSchema.optional().describe('STRUCTURED session digest: { title, done: [...], next: [...], blockers: [...] }'),
     },
   }, async ({ projectId, summary, stack, conventions, digest }) => {

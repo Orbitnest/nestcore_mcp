@@ -3,6 +3,9 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
+import { untrustedResult } from '../utils/untrusted.js';
+
+const LOG_SOURCE = 'project log entries (messages, SQL, request data written by apps and their end users)';
 
 export function registerLoggingTools(server: McpServer, ctx: ToolContext): void {
 
@@ -13,11 +16,11 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
       projectId: z.string().optional(),
       logType: z.enum(['all', 'database', 'auth', 'edge-functions']).optional(),
       level: z.enum(['info', 'warn', 'error']).optional(),
-      startTime: z.string().optional().describe('ISO 8601 date or timestamp'),
-      endTime: z.string().optional().describe('ISO 8601 date or timestamp'),
-      search: z.string().optional(),
+      startTime: z.string().max(40).optional().describe('ISO 8601 date or timestamp'),
+      endTime: z.string().max(40).optional().describe('ISO 8601 date or timestamp'),
+      search: z.string().max(500).optional(),
       limit: z.number().int().min(1).max(1000).optional(),
-      offset: z.number().int().min(0).optional(),
+      offset: z.number().int().min(0).max(1_000_000).optional(),
     },
   }, async ({ projectId, logType, level, startTime, endTime, search, limit, offset }) => {
     try {
@@ -40,9 +43,7 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
           result = await ctx.apiClient.getLogs(id, filters);
       }
 
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, LOG_SOURCE);
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -51,15 +52,13 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
   // ─── Get Slow Queries ───
   server.registerTool('nestcore_get_slow_queries', {
     description: 'Get slow database queries (queries taking >1000ms) for performance monitoring.',
-    inputSchema: { projectId: z.string().optional(), limit: z.number().optional() },
+    inputSchema: { projectId: z.string().optional(), limit: z.number().int().min(1).max(1000).optional() },
   }, async ({ projectId, limit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getSlowQueryLogs(id, { limit });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'slow query log entries (SQL text and parameters from apps and their end users)');
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -72,9 +71,9 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
       projectId: z.string().optional(),
       format: z.enum(['json', 'csv']).optional(),
       level: z.enum(['info', 'warn', 'error']).optional(),
-      search: z.string().optional(),
-      startTime: z.string().optional().describe('ISO 8601 date or timestamp'),
-      endTime: z.string().optional().describe('ISO 8601 date or timestamp'),
+      search: z.string().max(500).optional(),
+      startTime: z.string().max(40).optional().describe('ISO 8601 date or timestamp'),
+      endTime: z.string().max(40).optional().describe('ISO 8601 date or timestamp'),
     },
   }, async ({ projectId, format, level, search, startTime, endTime }) => {
     try {
@@ -82,9 +81,7 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const { body, truncated } = await ctx.apiClient.exportLogs(id, { format, level, search, startTime, endTime });
       const note = truncated ? '\n\n[Export truncated at 10,000 rows — narrow the time range.]' : '';
-      return {
-        content: [{ type: 'text' as const, text: body + note }],
-      };
+      return untrustedResult(body, LOG_SOURCE, { raw: true, suffix: note });
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -99,9 +96,7 @@ export function registerLoggingTools(server: McpServer, ctx: ToolContext): void 
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getLogStats(id);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      return untrustedResult(result, 'log statistics (may include log messages written by apps and their end users)');
     } catch (error) {
       return formatErrorResponse(error);
     }
